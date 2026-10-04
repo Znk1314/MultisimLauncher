@@ -61,6 +61,12 @@ single self-contained file with no dependencies.
 
 ![Multisim Launcher](assets/screenshot.png)
 
+> **Unsigned binary warning.** Windows SmartScreen will block the installer on
+> first run because it is not code-signed. Click `More info` → `Run anyway`, or
+> verify the SHA-256 against `release/SHA256SUMS.txt`, or build from source.
+> This is normal for any unsigned program downloaded from the internet — see
+> [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md).
+
 ## Requirements
 
 | | |
