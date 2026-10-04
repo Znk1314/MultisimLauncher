@@ -167,7 +167,7 @@ internal static class GenIcon
             // Measured spans: a short one on the right, a full width one, and a
             // lower pair on the left. Round caps so the ends tuck into their pads
             // instead of sticking out as square corners.
-            float bXRight = U(242f, size);
+            float bXRight = U(224f, size);   // inset so the brass pad sits inside the tile
             float bPadR = padR * 0.82f;
 
             float bYTop = U(68f, size);       // short run, right side
@@ -175,8 +175,8 @@ internal static class GenIcon
             float bYLow1 = U(197f, size);     // lower left pair
             float bYLow2 = U(204f, size);
             float bXTopLeft = U(172f, size);
-            float bXFullLeft = U(8f, size);
-            float bXLowLeft = U(8f, size);
+            float bXFullLeft = U(22f, size);    // inset per request: brass stays inside the tile
+            float bXLowLeft = U(22f, size);
             float bXLowRight = U(75f, size);
 
             using (Pen pen = new Pen(Terminal, brassRun))
@@ -200,7 +200,7 @@ internal static class GenIcon
                 // ---- three white stems along the bottom ------------------------
                 float[] stemX = new float[] { U(30f, size), U(134f, size), U(203f, size) };
                 float[] stemTop = new float[] { U(166f, size), U(150f, size), U(160f, size) };
-                float stemBottom = U(244f, size);
+                float stemBottom = U(236f, size);   // stops inside the tile
 
                 for (int i = 0; i < 3; i++)
                 {
