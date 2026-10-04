@@ -1,22 +1,37 @@
-# build output
-dist/
-obj/
-bin/
-*.exe
+# build output - never commit these
+/bin/
+/obj/
+/dist/
 *.pdb
 *.user
+*.suo
 
-# but keep the shipped launcher out of git only via the rules above;
-# the screenshot is a source asset
-!assets/screenshot.png
+# NOTE: release/ is deliberately NOT ignored. See the bottom of this file.
 
 # installer build leftovers
 installer/*.log
+installer/*.tmp
 
-# editor / OS noise
+# IDE / editor
 .vs/
 .vscode/
 .idea/
-*.suo
+*.swp
+
+# OS noise
 Thumbs.db
 desktop.ini
+.DS_Store
+
+# local run logs, in case anyone runs a tool from inside the checkout
+*.log
+logs/
+
+# ---------------------------------------------------------------------------
+# The two binaries below ARE meant to be committed, so that anyone landing on
+# the repository can download a ready-to-run build without a Releases page.
+# They live in release/ precisely so that build output and shipped artifacts
+# never get confused with each other.
+# ---------------------------------------------------------------------------
+!/release/MultisimLauncher.exe
+!/release/MultisimLauncher-Setup.exe
