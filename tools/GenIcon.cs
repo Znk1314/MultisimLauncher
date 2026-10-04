@@ -73,7 +73,7 @@ internal static class GenIcon
 
             // Below roughly 24px the fine runs merge into noise, so small frames
             // use fewer, thicker runs instead of a scaled-down copy.
-            bool detailed = size >= 24;
+            bool detailed = size >= 32;
 
             float pad = size * 0.055f;
             RectangleF badge = new RectangleF(pad, pad, size - pad * 2, size - pad * 2);
@@ -103,56 +103,73 @@ internal static class GenIcon
             }
 
             // ---- circuit runs ------------------------------------------------
-            // Layout mirrors the Multisim icon: two long horizontal runs with
-            // round brass terminals on the right, a square pad on the left, and
-            // a vertical run joining them.
+            // A five-line bundle fed from a vertical trunk on the left: every run
+            // starts at the trunk and extends right by a different amount, with
+            // brass terminals on the three longest. The trunk is the spine, so
+            // the whole thing reads as one connected circuit.
             //
-            // The vertical run spans from the upper long run all the way down,
-            // and the middle run sits ON the long run's y, so every trace
-            // visibly meets another. An earlier version left the vertical run
-            // floating between the two, which read as a broken bracket.
-            // Thin strokes on purpose: heavy runs made the badge look clumsy at
-            // every size. Fine lines also survive downscaling better.
-            float stroke = Math.Max(1.0f, size * 0.036f);
-            float dotR = Math.Max(1.2f, size * 0.044f);
+            // Line count is a size trade-off. Below roughly 32px five lines plus
+            // a trunk collapse into a grey smear, so small frames draw a reduced
+            // set - fewer, longer runs read far better than a shrunken copy.
+            float stroke = Math.Max(0.9f, size * 0.029f);
+            float dotR = Math.Max(1.1f, size * 0.040f);
+            float busW = Math.Max(0.9f, stroke * 1.45f);
 
-            float xL = size * 0.195f;           // left edge of the runs
-            float xR = size * 0.800f;           // right edge
-            float xVert = size * 0.395f;        // vertical connector
-            float yTop = size * 0.315f;         // upper long run
-            float yMid = size * 0.500f;         // short dim run (feed)
-            float yBot = size * 0.685f;         // lower long run
+            float xBus = size * 0.335f;         // the trunk, left of centre
+            float xEnd = size * 0.795f;         // where the terminals sit
+            // Per-run right ends, varied on purpose so the bundle tapers instead
+            // of forming a solid block.
+            float e0 = xEnd;
+            float e1 = size * 0.620f;
+            float e2 = size * 0.735f;
+            float e3 = size * 0.575f;
+            float e4 = xEnd;
+
+            // five evenly spaced rows
+            float y0 = size * 0.280f;
+            float yStep = size * 0.110f;
+            float y1 = y0 + yStep;
+            float y2 = y0 + yStep * 2f;
+            float y3 = y0 + yStep * 3f;
+            float y4 = y0 + yStep * 4f;
 
             using (Pen pen = new Pen(Trace, stroke))
             {
                 pen.StartCap = LineCap.Round;
                 pen.EndCap = LineCap.Round;
 
-                // upper long run -> brass terminal
-                g.DrawLine(pen, xL, yTop, xR - dotR, yTop);
-                // lower long run -> brass terminal
-                g.DrawLine(pen, xVert, yBot, xR - dotR, yBot);
-                // vertical run joining the two long runs
-                g.DrawLine(pen, xVert, yTop, xVert, yBot);
-
                 if (detailed)
                 {
-                    // short dim feed that tees into the vertical run
-                    using (Pen dim = new Pen(TraceDim, Math.Max(1f, stroke * 0.70f)))
-                    {
-                        dim.StartCap = LineCap.Round;
-                        dim.EndCap = LineCap.Round;
-                        g.DrawLine(dim, xL, yMid, xVert, yMid);
-                    }
+                    g.DrawLine(pen, xBus, y0, e0 - dotR * 0.55f, y0);
+                    g.DrawLine(pen, xBus, y1, e1, y1);
+                    g.DrawLine(pen, xBus, y2, e2 - dotR * 0.55f, y2);
+                    g.DrawLine(pen, xBus, y3, e3, y3);
+                    g.DrawLine(pen, xBus, y4, e4 - dotR * 0.55f, y4);
+                }
+                else
+                {
+                    // Reduced set for the small frames: three runs and the trunk.
+                    g.DrawLine(pen, xBus, y0, e0 - dotR * 0.55f, y0);
+                    g.DrawLine(pen, xBus, y2, e2 - dotR * 0.55f, y2);
+                    g.DrawLine(pen, xBus, y4, e4 - dotR * 0.55f, y4);
+                }
+
+                // the trunk, drawn last so it sits cleanly over the run origins
+                using (Pen bp = new Pen(Trace, busW))
+                {
+                    bp.StartCap = LineCap.Round;
+                    bp.EndCap = LineCap.Round;
+                    g.DrawLine(bp, xBus, y0, xBus, y4);
                 }
             }
 
-            // ---- round terminals on the right --------------------------------
-            DrawPad(g, xR - dotR * 0.55f, yTop, dotR);
-            DrawPad(g, xR - dotR * 0.55f, yBot, dotR);
+            // ---- round terminals on the three longest runs ---------------------
+            DrawPad(g, e0 - dotR * 0.55f, y0, dotR);
+            DrawPad(g, e4 - dotR * 0.55f, y4, dotR);
+            if (detailed) DrawPad(g, e2 - dotR * 0.55f, y2, dotR);
 
-            // ---- square pad on the left --------------------------------------
-            DrawSquarePad(g, xL, yTop, stroke * 1.85f);
+            // ---- square pad at the trunk's head --------------------------------
+            DrawSquarePad(g, xBus, y0, stroke * 1.7f);
         }
         return bmp;
     }
