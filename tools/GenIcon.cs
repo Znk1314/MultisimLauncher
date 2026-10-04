@@ -80,98 +80,130 @@ internal static class GenIcon
             float radius = size * 0.185f;
 
             // ---- badge -----------------------------------------------------
+            // Rounded tile with a diagonal gradient. The Multisim icon also has a
+            // glossy sheen across the top; here it is a very soft radial wash
+            // rather than a linear band, because a linear sheen produced a
+            // visible horizontal seam across the middle of the tile.
             using (GraphicsPath path = Rounded(badge, radius))
             using (LinearGradientBrush b = new LinearGradientBrush(
-                badge, BadgeTop, BadgeBottom, 100f))
+                badge, BadgeTop, BadgeBottom, 115f))
             {
                 g.FillPath(b, path);
             }
-            // inner highlight: a soft top-edge sheen, the thing that makes a flat
-            // badge look like a physical tile
-            if (detailed)
+            using (GraphicsPath path = Rounded(badge, radius))
             {
-                using (GraphicsPath path = Rounded(badge, radius))
-                using (Pen p = new Pen(Color.FromArgb(46, 255, 255, 255), Math.Max(1f, size * 0.010f)))
+                g.SetClip(path);
+                float gw = badge.Width * 2.1f;
+                using (GraphicsPath gp = new GraphicsPath())
                 {
-                    g.DrawPath(p, path);
+                    gp.AddEllipse(badge.X + badge.Width * 0.5f - gw / 2f,
+                                  badge.Y - badge.Height * 0.72f, gw, gw * 0.92f);
+                    using (PathGradientBrush pg = new PathGradientBrush(gp))
+                    {
+                        pg.CenterColor = Color.FromArgb(64, 255, 255, 255);
+                        pg.SurroundColors = new Color[] { Color.FromArgb(0, 255, 255, 255) };
+                        g.FillPath(pg, gp);
+                    }
                 }
+                g.ResetClip();
             }
             using (GraphicsPath path = Rounded(badge, radius))
-            using (Pen p = new Pen(Color.FromArgb(70, 90, 130, 180), Math.Max(1f, size * 0.008f)))
+            using (Pen p = new Pen(Color.FromArgb(96, 214, 226, 255), Math.Max(1f, size * 0.008f)))
             {
                 g.DrawPath(p, path);
             }
 
             // ---- circuit runs ------------------------------------------------
-            // A five-line bundle fed from a vertical trunk on the left: every run
-            // starts at the trunk and extends right by a different amount, with
-            // brass terminals on the three longest. The trunk is the spine, so
-            // the whole thing reads as one connected circuit.
+            // Structure traced from the NI Multisim icon:
+            //   * three white horizontal runs, right ends capped with square pads
+            //   * two brass runs sitting just below the middle and bottom white
+            //     runs, their right ends capped with round brass pads at the SAME
+            //     x as the white pads, so the right edge lines up
+            //   * a short brass link joining the two brass runs
+            //   * three white stems along the bottom, each topped by a round pad
             //
-            // Line count is a size trade-off. Below roughly 32px five lines plus
-            // a trunk collapse into a grey smear, so small frames draw a reduced
-            // set - fewer, longer runs read far better than a shrunken copy.
-            float stroke = Math.Max(0.9f, size * 0.029f);
-            float dotR = Math.Max(1.1f, size * 0.040f);
-            float busW = Math.Max(0.9f, stroke * 1.45f);
+            // Faithful to the original geometry, recoloured to the deeper navy
+            // palette. Below about 32px the fine runs merge, so small frames drop
+            // the stems - fewer, longer runs read far better than a shrunken copy.
+            float run = Math.Max(0.9f, size * 0.030f);       // horizontal stroke
+            float whiteR = Math.Max(1.0f, size * 0.036f);
 
-            float xBus = size * 0.335f;         // the trunk, left of centre
-            float xEnd = size * 0.795f;         // where the terminals sit
-            // Per-run right ends, varied on purpose so the bundle tapers instead
-            // of forming a solid block.
-            float e0 = xEnd;
-            float e1 = size * 0.620f;
-            float e2 = size * 0.735f;
-            float e3 = size * 0.575f;
-            float e4 = xEnd;
+            // vertical placement, scaled from the reference
+            float y1 = size * 0.210f;        // white run 1
+            float y2 = size * 0.370f;        // white run 2
+            float y3 = size * 0.500f;        // white run 3
+            float yG1 = y2 + size * 0.095f;  // brass run 1, below white run 2
+            float yG2 = y3 + size * 0.095f;  // brass run 2, below white run 3
 
-            // five evenly spaced rows
-            float y0 = size * 0.280f;
-            float yStep = size * 0.110f;
-            float y1 = y0 + yStep;
-            float y2 = y0 + yStep * 2f;
-            float y3 = y0 + yStep * 3f;
-            float y4 = y0 + yStep * 4f;
+            float xLeft = size * 0.085f;
+            float xRight = size * 0.880f;    // shared right edge for all pads
+            float xPadMid = size * 0.700f;   // right end of white runs 2 and 3
+            float xGLeft = size * 0.265f;    // left end of the brass runs
+            float xLink = size * 0.300f;     // the brass link
 
-            using (Pen pen = new Pen(Trace, stroke))
+            using (Pen pen = new Pen(Trace, run))
             {
-                pen.StartCap = LineCap.Round;
-                pen.EndCap = LineCap.Round;
-
-                if (detailed)
-                {
-                    g.DrawLine(pen, xBus, y0, e0 - dotR * 0.55f, y0);
-                    g.DrawLine(pen, xBus, y1, e1, y1);
-                    g.DrawLine(pen, xBus, y2, e2 - dotR * 0.55f, y2);
-                    g.DrawLine(pen, xBus, y3, e3, y3);
-                    g.DrawLine(pen, xBus, y4, e4 - dotR * 0.55f, y4);
-                }
-                else
-                {
-                    // Reduced set for the small frames: three runs and the trunk.
-                    g.DrawLine(pen, xBus, y0, e0 - dotR * 0.55f, y0);
-                    g.DrawLine(pen, xBus, y2, e2 - dotR * 0.55f, y2);
-                    g.DrawLine(pen, xBus, y4, e4 - dotR * 0.55f, y4);
-                }
-
-                // the trunk, drawn last so it sits cleanly over the run origins
-                using (Pen bp = new Pen(Trace, busW))
-                {
-                    bp.StartCap = LineCap.Round;
-                    bp.EndCap = LineCap.Round;
-                    g.DrawLine(bp, xBus, y0, xBus, y4);
-                }
+                pen.StartCap = LineCap.Square;
+                pen.EndCap = LineCap.Square;
+                g.DrawLine(pen, xLeft, y1, xRight, y1);
+                g.DrawLine(pen, xLeft, y2, xPadMid, y2);
+                g.DrawLine(pen, xLeft, y3, xPadMid, y3);
             }
 
-            // ---- round terminals on the three longest runs ---------------------
-            DrawPad(g, e0 - dotR * 0.55f, y0, dotR);
-            DrawPad(g, e4 - dotR * 0.55f, y4, dotR);
-            if (detailed) DrawPad(g, e2 - dotR * 0.55f, y2, dotR);
+            // white square pads capping the white runs
+            DrawSquarePad(g, xRight, y1, run * 2.4f);
+            DrawSquarePad(g, xPadMid, y2, run * 2.2f);
+            DrawSquarePad(g, xPadMid, y3, run * 2.2f);
 
-            // ---- square pad at the trunk's head --------------------------------
-            DrawSquarePad(g, xBus, y0, stroke * 1.7f);
+            // brass runs, drawn after the white ones so they sit on top
+            using (Pen pen = new Pen(Terminal, run * 1.2f))
+            {
+                pen.StartCap = LineCap.Square;
+                pen.EndCap = LineCap.Square;
+                g.DrawLine(pen, xGLeft, yG1, xRight, yG1);
+                g.DrawLine(pen, xGLeft, yG2, xRight, yG2);
+                // the short link joining them
+                g.DrawLine(pen, xLink, yG1, xLink, yG2);
+            }
+
+            // round brass pads, right-aligned with the white pads
+            DrawBrassPad(g, xRight, yG1, whiteR);
+            DrawBrassPad(g, xRight, yG2, whiteR);
+
+            if (detailed)
+            {
+                // ---- three white stems along the bottom ------------------------
+                float[] stemX = new float[] { size * 0.470f, size * 0.620f, size * 0.770f };
+                float[] stemPadY = new float[] { size * 0.615f, size * 0.640f, size * 0.605f };
+                float[] stemR = new float[] { size * 0.040f, size * 0.036f, size * 0.040f };
+                float stemBottom = size * 0.900f;
+
+                for (int i = 0; i < 3; i++)
+                {
+                    using (Pen sp = new Pen(Trace, run))
+                    {
+                        sp.StartCap = LineCap.Square;
+                        sp.EndCap = LineCap.Square;
+                        g.DrawLine(sp, stemX[i], stemPadY[i], stemX[i], stemBottom);
+                    }
+                    using (SolidBrush b = new SolidBrush(Trace))
+                    {
+                        float r = stemR[i];
+                        g.FillEllipse(b, stemX[i] - r, stemPadY[i] - r, r * 2, r * 2);
+                    }
+                }
+            }
         }
         return bmp;
+    }
+
+    /// <summary>Round brass pad: a brass disc with a darker centre.</summary>
+    private static void DrawBrassPad(Graphics g, float x, float y, float r)
+    {
+        using (SolidBrush b = new SolidBrush(Terminal))
+            g.FillEllipse(b, x - r, y - r, r * 2, r * 2);
+        using (SolidBrush b = new SolidBrush(TerminalDeep))
+            g.FillEllipse(b, x - r * 0.46f, y - r * 0.46f, r * 0.92f, r * 0.92f);
     }
 
     /// <summary>Round terminal: brass ring with a darker centre.</summary>
