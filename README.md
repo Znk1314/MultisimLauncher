@@ -59,6 +59,8 @@ administrator rights are required**, and it creates a desktop shortcut.
 If you prefer a portable copy, just download `MultisimLauncher.exe` — it is a
 single self-contained file with no dependencies.
 
+![Multisim Launcher](assets/screenshot.png)
+
 ## Requirements
 
 | | |
