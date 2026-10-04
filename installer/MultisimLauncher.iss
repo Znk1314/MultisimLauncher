@@ -13,6 +13,9 @@
 #ifndef SourceExe
   #define SourceExe "..\dist\MultisimLauncher.exe"
 #endif
+#ifndef IconFile
+  #define IconFile "..\assets\app.ico"
+#endif
 #ifndef OutputDir
   #define OutputDir "..\dist"
 #endif
@@ -54,6 +57,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 UninstallDisplayName={#AppName} {#AppVersion}
+SetupIconFile={#IconFile}
 UninstallDisplayIcon={app}\{#AppExeName}
 LicenseFile=..\LICENSE.txt
 InfoBeforeFile=..\docs\install-notes.txt
