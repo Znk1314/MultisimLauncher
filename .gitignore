@@ -1,4 +1,8 @@
-# build output - never commit these
+# ===========================================================================
+#  .gitignore
+# ===========================================================================
+
+# ---- build output: never commit -------------------------------------------
 /bin/
 /obj/
 /dist/
@@ -6,32 +10,39 @@
 *.user
 *.suo
 
-# NOTE: release/ is deliberately NOT ignored. See the bottom of this file.
-
-# installer build leftovers
+# ---- installer build leftovers --------------------------------------------
 installer/*.log
 installer/*.tmp
 
-# IDE / editor
+# ---- run logs: never commit -------------------------------------------------
+# The launcher writes its own log to %LOCALAPPDATA%\MultisimLauncher\, which is
+# outside this checkout. These rules are just a safety net so that a log can
+# never be committed by accident, for example when a tool is run from inside
+# the repository.
+*.log
+logs/
+
+# ---- IDE / editor ----------------------------------------------------------
 .vs/
 .vscode/
 .idea/
 *.swp
 
-# OS noise
+# ---- OS noise --------------------------------------------------------------
 Thumbs.db
 desktop.ini
 .DS_Store
 
-# local run logs, in case anyone runs a tool from inside the checkout
-*.log
-logs/
-
-# ---------------------------------------------------------------------------
-# The two binaries below ARE meant to be committed, so that anyone landing on
-# the repository can download a ready-to-run build without a Releases page.
-# They live in release/ precisely so that build output and shipped artifacts
-# never get confused with each other.
-# ---------------------------------------------------------------------------
+# ===========================================================================
+#  Exception: the shipped binaries ARE meant to be committed.
+#
+#  dist/ is build output and stays ignored. release/ holds the exact two files
+#  a visitor should be able to download without a Releases page, so it is
+#  un-ignored here. Negation rules must come LAST to win over *.log / logs/
+#  above - an earlier revision of this file got that order wrong and both
+#  binaries ended up ignored.
+# ===========================================================================
+!/release/
 !/release/MultisimLauncher.exe
 !/release/MultisimLauncher-Setup.exe
+!/release/README.txt
