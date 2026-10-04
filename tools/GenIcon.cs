@@ -114,69 +114,93 @@ internal static class GenIcon
             }
 
             // ---- circuit runs ------------------------------------------------
-            // Structure traced from the NI Multisim icon:
-            //   * three white horizontal runs, right ends capped with square pads
-            //   * two brass runs sitting just below the middle and bottom white
-            //     runs, their right ends capped with round brass pads at the SAME
-            //     x as the white pads, so the right edge lines up
-            //   * a short brass link joining the two brass runs
-            //   * three white stems along the bottom, each topped by a round pad
+            // Geometry measured from the 256x256 frame inside multisim.exe; the
+            // numbers passed to U() are that frame's pixel coordinates.
             //
-            // Faithful to the original geometry, recoloured to the deeper navy
-            // palette. Below about 32px the fine runs merge, so small frames drop
-            // the stems - fewer, longer runs read far better than a shrunken copy.
-            float run = Math.Max(0.9f, size * 0.030f);       // horizontal stroke
-            float whiteR = Math.Max(1.0f, size * 0.036f);
+            // What the reference contains:
+            //   * four white horizontal runs at y = 13.5, 46, 84.5, 123, all
+            //     starting at the left edge of the badge
+            //   * a white vertical segment at x = 26 joining runs 3 and 4, which
+            //     forms the bracket shape the icon is known for
+            //   * round white pads closing runs 2, 3 and 4
+            //   * brass runs: a short one at y = 68 on the right, a full width
+            //     one at y = 161, and two short ones at y = 197 and 204 on the
+            //     left. Each ends in a brass round pad.
+            //   * three white stems at x = 30, 134 and 203 rising from the bottom,
+            //     each topped with a round white pad
+            //
+            // Below about 32px the detail merges, so small frames drop the stems
+            // and the brass link.
+            float run = Math.Max(0.9f, size * 0.032f);       // white trace stroke
+            float brassRun = Math.Max(1.2f, size * 0.046f);  // brass traces are heavier
+            float padR = Math.Max(1.0f, size * 0.042f);      // round pad radius
 
-            // vertical placement, scaled from the reference
-            float y1 = size * 0.210f;        // white run 1
-            float y2 = size * 0.370f;        // white run 2
-            float y3 = size * 0.500f;        // white run 3
-            float yG1 = y2 + size * 0.095f;  // brass run 1, below white run 2
-            float yG2 = y3 + size * 0.095f;  // brass run 2, below white run 3
-
-            float xLeft = size * 0.085f;
-            float xRight = size * 0.880f;    // shared right edge for all pads
-            float xPadMid = size * 0.700f;   // right end of white runs 2 and 3
-            float xGLeft = size * 0.265f;    // left end of the brass runs
-            float xLink = size * 0.300f;     // the brass link
+            // ---- white runs ---------------------------------------------------
+            float wY1 = U(13.5f, size), wY2 = U(46f, size), wY3 = U(84.5f, size), wY4 = U(123f, size);
+            float wXLeft = U(9f, size);
+            float wX1 = U(226f, size);     // the top run reaches furthest right
+            float wX2 = U(161f, size);     // runs 2 and 4
+            float wX3 = U(139f, size);     // run 3 is the shortest
+            float bracketX = U(26f, size); // vertical join between runs 3 and 4
 
             using (Pen pen = new Pen(Trace, run))
             {
                 pen.StartCap = LineCap.Square;
                 pen.EndCap = LineCap.Square;
-                g.DrawLine(pen, xLeft, y1, xRight, y1);
-                g.DrawLine(pen, xLeft, y2, xPadMid, y2);
-                g.DrawLine(pen, xLeft, y3, xPadMid, y3);
+                // Run 1 carries no end pad: in the reference it simply stops.
+                g.DrawLine(pen, wXLeft, wY1, wX1, wY1);
+                g.DrawLine(pen, wXLeft, wY2, wX2 - padR, wY2);
+                g.DrawLine(pen, wXLeft, wY3, wX3 - padR, wY3);
+                g.DrawLine(pen, wXLeft, wY4, wX2 - padR, wY4);
+                // the bracket - this is what makes the mark recognisable
+                g.DrawLine(pen, bracketX, wY3, bracketX, wY4);
             }
 
-            // white square pads capping the white runs
-            DrawSquarePad(g, xRight, y1, run * 2.4f);
-            DrawSquarePad(g, xPadMid, y2, run * 2.2f);
-            DrawSquarePad(g, xPadMid, y3, run * 2.2f);
+            // Round white pads: runs 2, 3 and 4 at their right ends, plus the
+            // entry pad that sits on run 1 near the middle of the badge.
+            DrawDisc(g, wX2 - padR, wY2, padR, Trace, null);
+            DrawDisc(g, wX3 - padR, wY3, padR, Trace, null);
+            DrawDisc(g, wX2 - padR, wY4, padR, Trace, null);
+            DrawDisc(g, U(140f, size), U(24f, size), padR * 1.4f, Trace, null);
 
-            // brass runs, drawn after the white ones so they sit on top
-            using (Pen pen = new Pen(Terminal, run * 1.2f))
+            // ---- brass runs ---------------------------------------------------
+            // Measured spans: a short one on the right, a full width one, and a
+            // lower pair on the left. Round caps so the ends tuck into their pads
+            // instead of sticking out as square corners.
+            float bXRight = U(242f, size);
+            float bPadR = padR * 0.82f;
+
+            float bYTop = U(68f, size);       // short run, right side
+            float bYFull = U(161f, size);     // full width run
+            float bYLow1 = U(197f, size);     // lower left pair
+            float bYLow2 = U(204f, size);
+            float bXTopLeft = U(172f, size);
+            float bXFullLeft = U(8f, size);
+            float bXLowLeft = U(8f, size);
+            float bXLowRight = U(75f, size);
+
+            using (Pen pen = new Pen(Terminal, brassRun))
             {
-                pen.StartCap = LineCap.Square;
-                pen.EndCap = LineCap.Square;
-                g.DrawLine(pen, xGLeft, yG1, xRight, yG1);
-                g.DrawLine(pen, xGLeft, yG2, xRight, yG2);
-                // the short link joining them
-                g.DrawLine(pen, xLink, yG1, xLink, yG2);
+                pen.StartCap = LineCap.Round;
+                pen.EndCap = LineCap.Round;
+                g.DrawLine(pen, bXTopLeft, bYTop, bXRight - padR, bYTop);
+                g.DrawLine(pen, bXFullLeft, bYFull, bXRight - padR, bYFull);
+                g.DrawLine(pen, bXLowLeft, bYLow1, bXLowRight - bPadR, bYLow1);
+                g.DrawLine(pen, bXLowLeft, bYLow2, bXLowRight - bPadR, bYLow2);
             }
 
-            // round brass pads, right-aligned with the white pads
-            DrawBrassPad(g, xRight, yG1, whiteR);
-            DrawBrassPad(g, xRight, yG2, whiteR);
+            // brass round pads: one at each right end
+            DrawDisc(g, bXRight - padR, bYTop, bPadR, Terminal, null);
+            DrawDisc(g, bXRight - padR, bYFull, bPadR, Terminal, null);
+            DrawDisc(g, bXLowRight - bPadR, bYLow1, bPadR, Terminal, null);
+            DrawDisc(g, bXLowRight - bPadR, bYLow2, bPadR, Terminal, null);
 
             if (detailed)
             {
                 // ---- three white stems along the bottom ------------------------
-                float[] stemX = new float[] { size * 0.470f, size * 0.620f, size * 0.770f };
-                float[] stemPadY = new float[] { size * 0.615f, size * 0.640f, size * 0.605f };
-                float[] stemR = new float[] { size * 0.040f, size * 0.036f, size * 0.040f };
-                float stemBottom = size * 0.900f;
+                float[] stemX = new float[] { U(30f, size), U(134f, size), U(203f, size) };
+                float[] stemTop = new float[] { U(166f, size), U(150f, size), U(160f, size) };
+                float stemBottom = U(244f, size);
 
                 for (int i = 0; i < 3; i++)
                 {
@@ -184,43 +208,43 @@ internal static class GenIcon
                     {
                         sp.StartCap = LineCap.Square;
                         sp.EndCap = LineCap.Square;
-                        g.DrawLine(sp, stemX[i], stemPadY[i], stemX[i], stemBottom);
+                        g.DrawLine(sp, stemX[i], stemTop[i], stemX[i], stemBottom);
                     }
-                    using (SolidBrush b = new SolidBrush(Trace))
-                    {
-                        float r = stemR[i];
-                        g.FillEllipse(b, stemX[i] - r, stemPadY[i] - r, r * 2, r * 2);
-                    }
+                    DrawDisc(g, stemX[i], stemTop[i], padR * 0.95f, Trace, null);
                 }
             }
         }
         return bmp;
     }
 
-    /// <summary>Round brass pad: a brass disc with a darker centre.</summary>
-    private static void DrawBrassPad(Graphics g, float x, float y, float r)
+    /// <summary>
+    /// Map a coordinate from the 256px reference frame onto the current render
+    /// size, relative to the badge edge. Writing the measured numbers directly
+    /// keeps the copy aligned with the original at every size.
+    /// </summary>
+    private static float U(float referencePixel, int size)
     {
-        using (SolidBrush b = new SolidBrush(Terminal))
-            g.FillEllipse(b, x - r, y - r, r * 2, r * 2);
-        using (SolidBrush b = new SolidBrush(TerminalDeep))
-            g.FillEllipse(b, x - r * 0.46f, y - r * 0.46f, r * 0.92f, r * 0.92f);
+        // The reference coordinates are absolute pixels in a 256x256 frame, so
+        // the mapping is a plain uniform scale. An earlier version offset and
+        // rescaled them against an assumed badge size, which pushed every run
+        // about 7px too low.
+        return referencePixel * size / 256f;
     }
 
-    /// <summary>Round terminal: brass ring with a darker centre.</summary>
-    private static void DrawPad(Graphics g, float x, float y, float r)
+    /// <summary>Filled disc, optionally with a darker core.</summary>
+    private static void DrawDisc(Graphics g, float x, float y, float r, Color fill, Color? core)
     {
-        using (SolidBrush b = new SolidBrush(Terminal))
+        using (SolidBrush b = new SolidBrush(fill))
             g.FillEllipse(b, x - r, y - r, r * 2, r * 2);
-        using (SolidBrush b = new SolidBrush(TerminalDeep))
-            g.FillEllipse(b, x - r * 0.48f, y - r * 0.48f, r * 0.96f, r * 0.96f);
+        if (core.HasValue)
+        {
+            using (SolidBrush b = new SolidBrush(core.Value))
+                g.FillEllipse(b, x - r * 0.46f, y - r * 0.46f, r * 0.92f, r * 0.92f);
+        }
     }
 
-    /// <summary>Square pad, the small solid block seen at a run's origin.</summary>
-    private static void DrawSquarePad(Graphics g, float x, float y, float s)
-    {
-        using (SolidBrush b = new SolidBrush(Trace))
-            g.FillRectangle(b, x - s / 2f, y - s / 2f, s, s);
-    }
+
+
 
     private static GraphicsPath Rounded(RectangleF r, float radius)
     {
