@@ -113,6 +113,20 @@ internal static class GenIcon
                 g.DrawPath(p, path);
             }
 
+            // Everything below is clipped to the badge. This is not cosmetic: the
+            // mark runs to the tile edge in the reference, where the rounded
+            // corners cut it off. Without the clip, runs and pads spill into the
+            // transparent corners and show up outside the icon in Explorer.
+            //
+            // An earlier attempt set this clip and was then reverted because the
+            // overlap score dropped. That was the wrong call - the score only
+            // measures agreement with the reference inside the badge, and it was
+            // traded against a visible defect.
+            using (GraphicsPath badgeClip = Rounded(badge, radius))
+            {
+                g.SetClip(badgeClip, CombineMode.Replace);
+            }
+
             // ---- circuit runs ------------------------------------------------
             // Geometry measured from the 256x256 frame inside multisim.exe; the
             // numbers passed to U() are that frame's pixel coordinates.
@@ -137,8 +151,8 @@ internal static class GenIcon
 
             // ---- white runs ---------------------------------------------------
             float wY1 = U(13.5f, size), wY2 = U(46f, size), wY3 = U(84.5f, size), wY4 = U(123f, size);
-            float wXLeft = U(9f, size);
-            float wX1 = U(226f, size);     // the top run reaches furthest right
+            float wXLeft = U(0f, size);          // reaches the tile edge; the clip trims it
+            float wX1 = U(232f, size);     // trimmed by the clip
             float wX2 = U(161f, size);     // runs 2 and 4
             float wX3 = U(139f, size);     // run 3 is the shortest
             float bracketX = U(26f, size); // vertical join between runs 3 and 4
@@ -167,7 +181,7 @@ internal static class GenIcon
             // Measured spans: a short one on the right, a full width one, and a
             // lower pair on the left. Round caps so the ends tuck into their pads
             // instead of sticking out as square corners.
-            float bXRight = U(224f, size);   // inset so the brass pad sits inside the tile
+            float bXRight = U(238f, size);   // pad sits near the edge, trimmed by the clip
             float bPadR = padR * 0.82f;
 
             float bYTop = U(68f, size);       // short run, right side
@@ -175,8 +189,8 @@ internal static class GenIcon
             float bYLow1 = U(197f, size);     // lower left pair
             float bYLow2 = U(204f, size);
             float bXTopLeft = U(172f, size);
-            float bXFullLeft = U(22f, size);    // inset per request: brass stays inside the tile
-            float bXLowLeft = U(22f, size);
+            float bXFullLeft = U(0f, size);     // reaches the tile edge; the clip trims it
+            float bXLowLeft = U(0f, size);
             float bXLowRight = U(75f, size);
 
             using (Pen pen = new Pen(Terminal, brassRun))
@@ -200,7 +214,7 @@ internal static class GenIcon
                 // ---- three white stems along the bottom ------------------------
                 float[] stemX = new float[] { U(30f, size), U(134f, size), U(203f, size) };
                 float[] stemTop = new float[] { U(166f, size), U(150f, size), U(160f, size) };
-                float stemBottom = U(236f, size);   // stops inside the tile
+                float stemBottom = U(260f, size);   // overshoots; the clip trims it flush
 
                 for (int i = 0; i < 3; i++)
                 {
