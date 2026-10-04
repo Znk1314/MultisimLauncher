@@ -65,22 +65,28 @@ InfoBeforeFile=..\docs\install-notes.txt
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
-[Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
-Name: "startmenu";  Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"
-
 [Files]
 Source: "{#SourceExe}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md";     DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "..\LICENSE.txt";   DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Icons]
-; Start menu
-Name: "{group}\{#AppName}";              Filename: "{app}\{#AppExeName}"; Tasks: startmenu
-Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"; Tasks: startmenu
-; Desktop shortcut
-Name: "{userdesktop}\{#AppName}";        Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
-; Optional: start with Windows (not enabled by default, see [Run] below)
+; Shortcuts are deliberately NOT gated on a [Tasks] entry.
+;
+; Gating them looked tidier but broke silent installation: with /VERYSILENT
+; there is no task page, so no task is selected and the shortcuts are silently
+; skipped. The install still reports success, so the only symptom is a missing
+; shortcut that nothing explains.
+;
+; The earlier attempt used "Flags: checkedonce" on the task, which has a second
+; failure mode: it remembers the answer from the first run, so anyone who ever
+; unticked it never gets a shortcut again.
+;
+; A launcher whose main entry point is the desktop shortcut should always create
+; it, so these are unconditional.
+Name: "{group}\{#AppName}";              Filename: "{app}\{#AppExeName}"
+Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
+Name: "{userdesktop}\{#AppName}";        Filename: "{app}\{#AppExeName}"
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
