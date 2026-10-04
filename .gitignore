@@ -1,0 +1,22 @@
+# build output
+dist/
+obj/
+bin/
+*.exe
+*.pdb
+*.user
+
+# but keep the shipped launcher out of git only via the rules above;
+# the screenshot is a source asset
+!assets/screenshot.png
+
+# installer build leftovers
+installer/*.log
+
+# editor / OS noise
+.vs/
+.vscode/
+.idea/
+*.suo
+Thumbs.db
+desktop.ini

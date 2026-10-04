@@ -1,0 +1,45 @@
+name: build
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the launcher
+        shell: pwsh
+        run: .\build.ps1
+
+      - name: Verify the artifact exists and is a GUI binary
+        shell: pwsh
+        run: |
+          $exe = 'dist\MultisimLauncher.exe'
+          if (-not (Test-Path $exe)) { throw "build produced no $exe" }
+          $bytes = [IO.File]::ReadAllBytes($exe)
+          $pe = [BitConverter]::ToInt32($bytes, 0x3C)
+          $subsystem = [BitConverter]::ToUInt16($bytes, $pe + 0x5C)
+          # 2 = IMAGE_SUBSYSTEM_WINDOWS_GUI: guarantees no console window appears
+          if ($subsystem -ne 2) { throw "expected a GUI binary, got subsystem $subsystem" }
+          Write-Host "OK: GUI binary, $((Get-Item $exe).Length) bytes"
+
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          .\build.ps1 -MakeInstaller
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: MultisimLauncher
+          path: |
+            dist/MultisimLauncher.exe
+            dist/MultisimLauncher-Setup.exe
+          if-no-files-found: warn

@@ -1,0 +1,73 @@
+Installation notes
+==================
+
+What this program does
+----------------------
+On Windows 11 (24H2 / 25H2), NI Multisim 14.x sometimes starts with
+
+    Problem accessing the database.
+    The Master Database cannot be accessed.
+
+and the component library is then empty, so no parts can be placed. Whether a
+cold start works is effectively random - on the machine this was developed on,
+roughly a quarter to a half of launches came up broken.
+
+Multisim Launcher was written for exactly that situation. Press Start and it
+keeps launching Multisim, quietly closing the attempts that came up with an
+unusable library, until one instance is genuinely healthy. Failed attempts are
+not shown to you; only a status line changes. Once an instance is healthy the
+button becomes Stop, and pressing it closes Multisim again.
+
+The program does NOT modify Multisim, its databases, or your Windows settings.
+It only starts and closes programs that are already on your computer.
+
+
+Requirements
+------------
+* Windows 10 or 11 (x64)
+* NI Multisim 14.x already installed  (the launcher cannot install Multisim)
+* .NET Framework 4.x - already present on every supported Windows version,
+  so there is nothing else to download
+
+
+Where the per-user component database lives
+-------------------------------------------
+Multisim keeps a per-user component database in
+
+    %APPDATA%\National Instruments\Circuit Design Suite\<version>\database
+        UsrComp_S_<username>.usr
+
+For this reason the launcher deliberately runs WITHOUT administrator rights.
+If Multisim were started elevated, it would use a different user profile and
+therefore a different user database than the one you normally work with.
+
+
+If Multisim is on another drive
+-------------------------------
+The launcher locates Multisim in this order:
+
+  1. the install location recorded by the NI installer in the registry
+     (HKLM\SOFTWARE\WOW6432Node\National Instruments\Circuit Design Suite\<ver>\Common)
+     - this is the authoritative source and works regardless of drive letter,
+     because the NI installer records the real database paths
+  2. a scan of the usual install roots, which also covers a Multisim installed
+     onto drive D: or E:
+       C:\Program Files (x86)\National Instruments\Circuit Design Suite <ver>\
+       C:\Program Files\National Instruments\Circuit Design Suite <ver>\
+       D:\Program Files (x86)\National Instruments\Circuit Design Suite <ver>\
+       D:\Program Files\National Instruments\Circuit Design Suite <ver>\
+       D:\National Instruments\Circuit Design Suite <ver>\
+       E:\ ... (same three patterns)
+
+If your installation is somewhere else entirely, please open an issue with the
+path - adding another pattern is a one line change.
+
+
+Uninstalling
+------------
+Settings > Apps > Installed apps > "Multisim Launcher" > Uninstall,
+or use the Start menu entry. A log file is kept at
+
+    %LOCALAPPDATA%\MultisimLauncher\launcher.log
+
+and is removed on uninstall. Attach it to a bug report if something goes wrong.

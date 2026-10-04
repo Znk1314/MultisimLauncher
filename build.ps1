@@ -1,0 +1,133 @@
+# =============================================================================
+#  build.ps1 - build the Multisim Launcher with the C# compiler that ships
+#  inside Windows. No SDK, no NuGet, no Visual Studio required.
+#
+#  Usage:
+#     powershell -ExecutionPolicy Bypass -File build.ps1
+#     powershell -ExecutionPolicy Bypass -File build.ps1 -MakeInstaller
+#
+#  Output:
+#     dist\MultisimLauncher.exe          the launcher (single file, no terminal)
+#     dist\MultisimLauncher-Setup.exe    installer (only with -MakeInstaller)
+# =============================================================================
+[CmdletBinding()]
+param(
+    [switch]$MakeInstaller,
+    [switch]$Clean
+)
+
+$ErrorActionPreference = 'Stop'
+
+$root     = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$srcDir   = Join-Path $root 'src\MultisimLauncher'
+$distDir  = Join-Path $root 'dist'
+$objDir   = Join-Path $root 'obj'
+$outExe   = Join-Path $distDir 'MultisimLauncher.exe'
+
+function Write-Step($m) { Write-Host "==> $m" -ForegroundColor Cyan }
+function Write-Ok($m)   { Write-Host "    $m" -ForegroundColor Green }
+function Write-Warn2($m){ Write-Host "    $m" -ForegroundColor Yellow }
+
+# ---------------------------------------------------------------------------
+# locate the in-box C# compiler
+# ---------------------------------------------------------------------------
+Write-Step 'locating the C# compiler'
+$cscCandidates = @(
+    (Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'),
+    (Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe')
+)
+$csc = $cscCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if (-not $csc) {
+    throw 'csc.exe not found. Install .NET Framework 4.x (it ships with Windows 10/11).'
+}
+Write-Ok $csc
+
+# ---------------------------------------------------------------------------
+# clean
+# ---------------------------------------------------------------------------
+if ($Clean) {
+    Write-Step 'cleaning'
+    foreach ($d in @($distDir, $objDir)) {
+        if (Test-Path -LiteralPath $d) { Remove-Item -LiteralPath $d -Recurse -Force }
+    }
+    Write-Ok 'removed dist\ and obj\'
+}
+
+New-Item -ItemType Directory -Path $distDir -Force | Out-Null
+New-Item -ItemType Directory -Path $objDir  -Force | Out-Null
+
+# ---------------------------------------------------------------------------
+# compile
+# ---------------------------------------------------------------------------
+Write-Step 'compiling MultisimLauncher.exe (WinForms, no console window)'
+$sources = Get-ChildItem -LiteralPath $srcDir -Filter '*.cs' -File |
+           Sort-Object Name | ForEach-Object { $_.FullName }
+if (-not $sources) { throw "no .cs files found in $srcDir" }
+
+$refs = @(
+    'System.dll',
+    'System.Core.dll',
+    'System.Drawing.dll',
+    'System.Windows.Forms.dll'
+)
+
+$args = New-Object System.Collections.Generic.List[string]
+$args.Add('/nologo')
+$args.Add('/target:winexe')          # <- no console window, ever
+$args.Add('/platform:anycpu')
+$args.Add('/optimize+')
+$args.Add('/utf8output')
+$args.Add('/out:' + $outExe)
+$args.Add('/win32manifest:' + (Join-Path $srcDir 'app.manifest'))
+foreach ($r in $refs) { $args.Add('/reference:' + $r) }
+foreach ($s in $sources) { $args.Add($s) }
+
+Write-Ok ("sources: " + (($sources | ForEach-Object { Split-Path $_ -Leaf }) -join ', '))
+
+$output = & $csc $args.ToArray() 2>&1
+$exit = $LASTEXITCODE
+if ($output) { $output | ForEach-Object { Write-Host "    $_" } }
+if ($exit -ne 0 -or -not (Test-Path -LiteralPath $outExe)) {
+    throw "compile failed with exit code $exit"
+}
+
+$size = [math]::Round((Get-Item -LiteralPath $outExe).Length / 1KB, 1)
+Write-Ok "built $outExe ($size KB)"
+
+# ---------------------------------------------------------------------------
+# optional: installer
+# ---------------------------------------------------------------------------
+if ($MakeInstaller) {
+    Write-Step 'building the installer'
+
+    $isccCandidates = @(
+        (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
+        (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe'),
+        (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 5\ISCC.exe'),
+        # a per-user install (what installer\get-innosetup.ps1 does) lands here
+        (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'),
+        (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 7\ISCC.exe')
+    )
+    $iscc = $isccCandidates | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
+
+    if ($iscc) {
+        Write-Ok "Inno Setup found: $iscc"
+        $iss = Join-Path $root 'installer\MultisimLauncher.iss'
+        & $iscc "/DSourceExe=$outExe" "/DOutputDir=$distDir" $iss
+        if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+        Write-Ok 'installer built'
+    }
+    else {
+        Write-Warn2 'Inno Setup was not found, so the installer was not built.'
+        Write-Warn2 'Build it automatically with:'
+        Write-Warn2 '    powershell -ExecutionPolicy Bypass -File installer\get-innosetup.ps1'
+        Write-Warn2 'or install Inno Setup by hand: https://jrsoftware.org/isdl.php'
+        Write-Warn2 '(only needed to PRODUCE the installer; end users never need it)'
+    }
+}
+
+Write-Host ''
+Write-Host 'Done. Artifacts:' -ForegroundColor Green
+Get-ChildItem -LiteralPath $distDir -File | ForEach-Object {
+    Write-Host ("  {0,-34} {1,8:N1} KB" -f $_.Name, ($_.Length / 1KB))
+}
