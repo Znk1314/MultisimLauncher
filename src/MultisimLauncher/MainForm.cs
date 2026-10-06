@@ -25,7 +25,7 @@ using System.Windows.Forms;
 
 namespace MultisimLauncher
 {
-    internal sealed partial class MainForm : Form
+    internal sealed class MainForm : Form
     {
         // ---- palette -------------------------------------------------------
         private static readonly Color Ink = Color.FromArgb(238, 244, 252);
@@ -49,7 +49,6 @@ namespace MultisimLauncher
         private readonly SidebarItem _navDetails;
         private readonly SidebarItem _navLog;
         private readonly SidebarItem _navQuit;
-        private readonly ToggleItem _navPreheat;
         private readonly Label _stateText;
         private readonly Label _stateSub;
         private readonly Label _attemptText;
@@ -68,29 +67,6 @@ namespace MultisimLauncher
         private Image _background;
         private bool _showDetails;
 
-        // Tray presence. Created lazily, the first time the window is hidden -
-        // a user who never minimises never gets an icon in the notification area.
-        private TrayIcon _tray;
-
-        // True while the window is deliberately parked in the tray, so the close
-        // handler can tell "user closed the window" from "we are shutting down".
-        private bool _hiddenToTray;
-
-        // Set only by the tray's Exit command and the Quit item, so that closing
-        // the window can mean minimising while exiting still exits.
-        private bool _exiting;
-
-        // Started by --preheat: no visible window at all, just the retry loop.
-        private readonly bool _preheatMode;
-
-        // Set by TryOneLaunch when it focused a live Multisim instead of starting
-        // one, so the UI can say what actually happened.
-        private bool _reusedExisting;
-
-        // Recorded in the closing handler purely so the log can show why the
-        // window went away.
-        private string _closeReason = "?";
-
         // Retry tuning. Failures cluster in time, so there is a gap between
         // attempts rather than hammering the button.
         private const int SettleMs = 2500;
@@ -103,7 +79,6 @@ namespace MultisimLauncher
             foreach (string a in args)
             {
                 if (string.Equals(a, "--verbose", StringComparison.OrdinalIgnoreCase)) _showDetails = true;
-                if (string.Equals(a, "--preheat", StringComparison.OrdinalIgnoreCase)) _preheatMode = true;
             }
 
             _scale = MeasureScale();
@@ -163,29 +138,8 @@ namespace MultisimLauncher
             // --- GENERAL section ---
             side.Controls.Add(MakeSectionHeader(Strings.General, S(266)));
 
-            // Preheat toggle. This is the only setting that changes how the app
-            // behaves outside its own window, so it sits first, with its meaning
-            // spelled out underneath: the checkbox label alone ("preheat at
-            // login") does not say that it also means Multisim starts with the
-            // machine.
-            _navPreheat = new ToggleItem(Strings.Preheat);
-            _navPreheat.Location = new Point(S(14), S(288));
-            _navPreheat.Size = new Size(S(SideW - 28), S(30));
-            _navPreheat.Click += delegate { OnPreheatToggle(); };
-            side.Controls.Add(_navPreheat);
-
-            Label preheatHint = new Label();
-            preheatHint.AutoSize = false;
-            preheatHint.Text = Strings.PreheatHint;
-            preheatHint.Font = F("Segoe UI", 9.5f);
-            preheatHint.ForeColor = InkFaint;
-            preheatHint.BackColor = SideFill;
-            preheatHint.Location = new Point(S(48), S(322));
-            preheatHint.Size = new Size(S(SideW - 62), S(20));
-            side.Controls.Add(preheatHint);
-
             _navDetails = new SidebarItem(Strings.ShowDetails);
-            _navDetails.Location = new Point(S(14), S(356));
+            _navDetails.Location = new Point(S(14), S(292));
             _navDetails.Size = new Size(S(SideW - 28), S(38));
             _navDetails.SetChecked(_showDetails);
             _navDetails.Click += delegate
@@ -197,15 +151,15 @@ namespace MultisimLauncher
             side.Controls.Add(_navDetails);
 
             _navLog = new SidebarItem(Strings.OpenLog);
-            _navLog.Location = new Point(S(14), S(398));
+            _navLog.Location = new Point(S(14), S(334));
             _navLog.Size = new Size(S(SideW - 28), S(38));
             _navLog.Click += delegate { OpenLogFile(); };
             side.Controls.Add(_navLog);
 
             _navQuit = new SidebarItem(Strings.Quit);
-            _navQuit.Location = new Point(S(14), S(440));
+            _navQuit.Location = new Point(S(14), S(376));
             _navQuit.Size = new Size(S(SideW - 28), S(38));
-            _navQuit.Click += delegate { ExitApplication(); };
+            _navQuit.Click += delegate { Close(); };
             side.Controls.Add(_navQuit);
 
             // ================= hero area ===================================
@@ -253,44 +207,7 @@ namespace MultisimLauncher
             Controls.Add(_action);
 
             Load += OnLoad;
-            Shown += OnShown;
             FormClosing += OnFormClosing;
-            // Logged separately from FormClosing so a shutdown that skips the
-            // closing handler - which is what an unexpected exit looks like - is
-            // still visible in the log.
-            FormClosed += delegate { Log("form closed (reason=" + _closeReason + ")"); };
-        }
-
-        // --------------------------------------------------------------------
-        // preheat toggle
-        // --------------------------------------------------------------------
-        private void OnPreheatToggle()
-        {
-            bool want = !_navPreheat.Checked;
-
-            if (want && !Autostart.SetEnabled(true))
-            {
-                // Writing HKCU\...\Run can fail under policy. Say so rather than
-                // showing a tick that will not do anything at the next login.
-                _navPreheat.SetChecked(false);
-                SetSub(Strings.Preheat + " - " + Strings.NotFound);
-                Log("preheat: could not write the startup entry");
-                return;
-            }
-            if (!want) Autostart.SetEnabled(false);
-
-            SyncPreheatCheckbox();
-            Log("preheat " + (want ? "enabled" : "disabled"));
-        }
-
-        /// <summary>
-        /// Read the real startup state rather than trusting the tick, so a stale
-        /// entry left behind by a move shows up as off.
-        /// </summary>
-        private void SyncPreheatCheckbox()
-        {
-            bool on = Autostart.IsEnabled();
-            if (_navPreheat != null) _navPreheat.SetChecked(on);
         }
 
         // --------------------------------------------------------------------
@@ -406,7 +323,6 @@ namespace MultisimLauncher
             }
             SetState(Strings.Ready, Ink);
             SetSub("Multisim " + _install.Version);
-            SetTrayStatus(Strings.Ready);
             RefreshDetailLabels();
             Log("found: " + _install.ExePath + " (" + _install.Source + ")");
         }
@@ -505,31 +421,16 @@ namespace MultisimLauncher
                 {
                     _successCount++;
                     int shown = _attempt;
-                    bool reused = _reusedExisting;
                     Ui(delegate
                     {
-                        SetState(reused ? Strings.AlreadyRunning : Strings.Running, reused ? AccentSoft : Good);
-                        if (reused) SetSub(Strings.FocusedExisting);
-                        else SetSub(shown == 1
+                        SetState(Strings.Running, Good);
+                        SetSub(shown == 1
                             ? Strings.FirstTryOk
                             : Strings.AttemptPrefix + shown + Strings.AttemptSuffix);
                         _action.SetState(Strings.Stop, Strings.Running, Danger, true);
-                        SetTrayStatus(reused ? Strings.AlreadyRunning : Strings.Running);
                         RefreshDetailLabels();
                     });
-                    Log(reused
-                        ? "reused the running instance"
-                        : "successful launch on attempt " + _attempt);
-
-                    if (_preheatMode)
-                    {
-                        // Login warm-up. The work is done, so get out of the way
-                        // entirely rather than sitting invisible in memory for the
-                        // rest of the session.
-                        Log("preheat: Multisim is up; launcher exiting");
-                        ExitApplication();
-                        return;
-                    }
+                    Log("successful launch on attempt " + _attempt);
 
                     WatchUntilExit();
 
@@ -553,23 +454,11 @@ namespace MultisimLauncher
             bool cancelled = _cancelled;
             _busy = false;
             _attempt = 0;
-
-            if (_preheatMode)
-            {
-                // Nothing was achieved and there is no window to report it in.
-                // Leave a note in the log and get out of the way; the user will
-                // start the launcher by hand, which retries from scratch.
-                Log("preheat: gave up without a working Multisim");
-                ExitApplication();
-                return;
-            }
-
             Ui(delegate
             {
                 _action.SetState(Strings.Start, "", Accent, true);
                 if (cancelled) { SetState(Strings.Ready, Ink); SetSub("Multisim " + _install.Version); }
                 else { SetState(Strings.GaveUp, Danger); SetSub(""); }
-                SetTrayStatus(Strings.Ready);
                 RefreshDetailLabels();
             });
             Log("--- session end (no success) ---");
@@ -578,34 +467,8 @@ namespace MultisimLauncher
         /// <summary>One cold start; true only when the instance is usable.</summary>
         private bool TryOneLaunch()
         {
-            // Before starting anything: is there already a good instance?
-            //
-            // This replaces an unconditional KillResident() here, which closed
-            // every multisim.exe on the machine at the start of each attempt. It
-            // was harmless only while the launcher was the sole way Multisim got
-            // started. With preheating - or simply a second click on Start - it
-            // would have destroyed a perfectly good running session and then
-            // started a fresh one, which is the opposite of a warm start.
-            //
-            // multisim.exe is not single instance, so starting it again would
-            // produce a second copy rather than focusing the first. Reusing the
-            // live instance is therefore the only correct behaviour.
-            RunningInstance existing = MultisimSession.FindUsable();
-            if (existing != null)
-            {
-                Log("multisim already running (pid " + existing.Pid + "); focusing it instead of starting another");
-                MultisimSession.Focus(existing);
-                _reusedExisting = true;
-                return true;
-            }
-
-            // Instances that are still loading, or parked on the database error,
-            // are not usable. Clear them so this attempt starts from a clean
-            // slate; otherwise their lock files and half-built windows confuse
-            // the health check below.
-            if (MultisimSession.AnyRunning()) KillResident();
+            KillResident();
             SessionHealth.RemoveLockFiles(_install);
-            _reusedExisting = false;
 
             Process p;
             try
@@ -720,29 +583,6 @@ namespace MultisimLauncher
 
         private void OnFormClosing(object sender, FormClosingEventArgs e)
         {
-            _closeReason = e.CloseReason.ToString();
-            Log("form closing (reason=" + _closeReason + ", exiting=" + _exiting + ")");
-
-            // Which close reasons should actually end the process?
-            //
-            // Deliberately a whitelist rather than "everything except
-            // UserClosing". Testing showed a plain WM_CLOSE arrives as
-            // TaskManagerClosing, not UserClosing, so the obvious inverse test
-            // silently exited on a close that the user expects to be a minimise.
-            // Anything not listed here parks the window in the tray instead.
-            bool reallyQuit =
-                _exiting ||                                          // Quit, or the tray's Exit
-                e.CloseReason == CloseReason.WindowsShutDown ||      // machine is going down
-                e.CloseReason == CloseReason.ApplicationExitCall ||  // Application.Exit()
-                e.CloseReason == CloseReason.MdiFormClosing;
-
-            if (!reallyQuit)
-            {
-                e.Cancel = true;
-                MinimiseToTray(true);
-                return;
-            }
-
             _cancelled = true;
             Thread.Sleep(150);
             if (_background != null) { try { _background.Dispose(); } catch { } }
@@ -1015,7 +855,6 @@ namespace MultisimLauncher
         }
 
         public void SetChecked(bool value) { _checked = value; Invalidate(); }
-        public bool Checked { get { return _checked; } }
 
         protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
         protected override void OnMouseLeave(EventArgs e) { _hover = false; Invalidate(); base.OnMouseLeave(e); }
@@ -1050,108 +889,6 @@ namespace MultisimLauncher
                 {
                     e.Graphics.FillEllipse(b, Height * 0.44f - d / 2, (Height - d) / 2, d, d);
                 }
-            }
-        }
-    }
-
-    // ------------------------------------------------------------------------
-    // ToggleItem - a checkbox, drawn to match the sidebar.
-    //
-    // SidebarItem marks its state with a dot at Height * 0.44, which sits under
-    // the label because the label starts at Height * 0.30. That is survivable for
-    // a display preference, but not for a setting that changes what the machine
-    // does at login: it has to look like something you can turn on.
-    //
-    // So this draws a real box on the left with the label to its right, and fills
-    // it with an accent and a tick when on.
-    // ------------------------------------------------------------------------
-    internal sealed class ToggleItem : Control
-    {
-        private bool _hover;
-        private bool _checked;
-
-        public ToggleItem(string text)
-        {
-            Text = text;
-            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer |
-                     ControlStyles.UserPaint | ControlStyles.ResizeRedraw |
-                     ControlStyles.SupportsTransparentBackColor, true);
-            Cursor = Cursors.Hand;
-            BackColor = Color.Transparent;
-        }
-
-        public void SetChecked(bool value)
-        {
-            if (_checked == value) return;
-            _checked = value;
-            Invalidate();
-        }
-
-        public bool Checked { get { return _checked; } }
-
-        protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
-        protected override void OnMouseLeave(EventArgs e) { _hover = false; Invalidate(); base.OnMouseLeave(e); }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            MainForm.Smooth(e.Graphics);
-
-            if (_hover)
-            {
-                using (GraphicsPath p = FlatButton.Rounded(new Rectangle(0, 0, Width - 1, Height - 1), 7))
-                using (SolidBrush b = new SolidBrush(Color.FromArgb(34, 120, 180, 255)))
-                {
-                    e.Graphics.FillPath(b, p);
-                }
-            }
-
-            // the box: a square a little shorter than the row, vertically centred
-            float box = Height * 0.52f;
-            float bx = Height * 0.16f;
-            float by = (Height - box) / 2f;
-            RectangleF r = new RectangleF(bx, by, box, box);
-
-            using (GraphicsPath p = FlatButton.Rounded(Rectangle.Round(r), (int)Math.Max(3f, box * 0.28f)))
-            {
-                if (_checked)
-                {
-                    using (SolidBrush b = new SolidBrush(Color.FromArgb(64, 156, 255)))
-                        e.Graphics.FillPath(b, p);
-                }
-                else
-                {
-                    using (Pen pen = new Pen(Color.FromArgb(96, 116, 142), Math.Max(1.2f, Height * 0.045f)))
-                        e.Graphics.DrawPath(pen, p);
-                }
-            }
-
-            if (_checked)
-            {
-                // a hand-drawn tick, so no glyph or font dependency
-                using (Pen pen = new Pen(Color.White, Math.Max(1.6f, box * 0.16f)))
-                {
-                    pen.StartCap = LineCap.Round;
-                    pen.EndCap = LineCap.Round;
-                    pen.LineJoin = LineJoin.Round;
-                    PointF a = new PointF(bx + box * 0.24f, by + box * 0.52f);
-                    PointF b = new PointF(bx + box * 0.44f, by + box * 0.72f);
-                    PointF c = new PointF(bx + box * 0.78f, by + box * 0.28f);
-                    e.Graphics.DrawLines(pen, new PointF[] { a, b, c });
-                }
-            }
-
-            Color text = _hover ? Color.FromArgb(232, 240, 250)
-                       : _checked ? Color.FromArgb(206, 224, 246)
-                       : Color.FromArgb(168, 184, 206);
-
-            float textX = bx + box + Height * 0.30f;
-            using (Font f = new Font("Segoe UI", Height * 0.36f, FontStyle.Regular, GraphicsUnit.Pixel))
-            using (Brush b = new SolidBrush(text))
-            using (StringFormat sf = new StringFormat())
-            {
-                sf.LineAlignment = StringAlignment.Center;
-                e.Graphics.DrawString(Text, f, b,
-                    new RectangleF(textX, 0, Width - textX, Height), sf);
             }
         }
     }

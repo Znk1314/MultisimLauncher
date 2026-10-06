@@ -92,38 +92,5 @@ namespace MultisimLauncher
         public static readonly string Loaded = C(0x5DF2, 0x52A0, 0x8F7D);
         // "not loaded"
         public static readonly string NotLoaded = C(0x672A, 0x52A0, 0x8F7D);
-
-        // ---- preheat-at-login option ---------------------------------------
-        // "preheat at login"
-        public static readonly string Preheat = C(0x5F00, 0x673A, 0x9884, 0x70ED);
-        // "warm up Multisim in the background after signing in"
-        public static readonly string PreheatHint =
-            C(0x767B, 0x5F55, 0x540E, 0x5728, 0x540E, 0x53F0,
-              0x9884, 0x5148, 0x52A0, 0x8F7D, 0x004D, 0x0075, 0x006C, 0x0074, 0x0069, 0x0073, 0x0069, 0x006D);
-        // "preheat"  (short state word)
-        public static readonly string PreheatShort = C(0x9884, 0x70ED);
-        // "waiting for Multisim to be ready"
-        public static readonly string PreheatWaiting = C(0x7B49, 0x5F85, 0x9884, 0x70ED, 0x5B8C, 0x6210);
-
-        // ---- already-running handling --------------------------------------
-        // "Multisim is already running"
-        public static readonly string AlreadyRunning =
-            C(0x004D, 0x0075, 0x006C, 0x0074, 0x0069, 0x0073, 0x0069, 0x006D,
-              0x5DF2, 0x5728, 0x8FD0, 0x884C);
-        // "brought the existing window to the front"
-        public static readonly string FocusedExisting =
-            C(0x5DF2, 0x5207, 0x5230, 0x5DF2, 0x6253, 0x5F00, 0x7684, 0x7A97, 0x53E3);
-
-        // ---- tray ----------------------------------------------------------
-        // "show window"
-        public static readonly string TrayShow = C(0x663E, 0x793A, 0x7A97, 0x53E3);
-        // "exit"
-        public static readonly string TrayExit = C(0x9000, 0x51FA, 0x7A0B, 0x5E8F);
-        // "still running in the tray"
-        public static readonly string TrayHint =
-            C(0x5DF2, 0x6700, 0x5C0F, 0x5316, 0x5230, 0x6258, 0x76D8, 0xFF0C, 0x540E, 0x53F0, 0x7EE7, 0x7EED, 0x5DE5, 0x4F5C);
-        // "click the tray icon to restore the window"
-        public static readonly string TrayRestoreHint =
-            C(0x70B9, 0x51FB, 0x6258, 0x76D8, 0x56FE, 0x6807, 0x6062, 0x590D, 0x7A97, 0x53E3);
     }
 }

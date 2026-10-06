@@ -149,59 +149,6 @@ Adding another location is a one-line change in
 
 ---
 
-## Tray, reuse and preheat
-
-Three behaviours that matter if you use this every day. All three came out of
-the same discovery: **`multisim.exe` is not single instance.** Starting it while
-it is already running produces a second complete copy — measured on the
-reference machine, two starts in a row left two processes, each with its own
-main window and about 150 MB of memory.
-
-### It will not start a second Multisim
-
-Before every attempt the launcher asks whether a usable instance is already
-running, by window class rather than window title (the title carries the open
-file name and the UI language, so it is not stable). If there is one, it is
-brought to the front and nothing is started.
-
-This also fixed a latent bug: the previous version unconditionally closed every
-`multisim.exe` on the machine at the start of each attempt. That was survivable
-while the launcher was the only way Multisim ever got started, but it would
-have thrown away a good running session on a second click.
-
-### Closing the window keeps it running
-
-Closing the window moves it to the notification area instead of exiting, so a
-retry loop that is already in progress can finish. The tray menu restores the
-window or exits for real, and the first time you minimise, a balloon points out
-where the window went.
-
-Because the window is hidden rather than minimised, no taskbar button is left
-behind for a window you cannot see.
-
-`Quit` in the sidebar exits without redirecting to the tray.
-
-### Preheat at login (off by default)
-
-Tick **Preheat at login** and the launcher registers itself under
-`HKCU\Software\Microsoft\Windows\CurrentVersion\Run` with `--preheat`. At your
-next sign-in it starts Multisim in the background, retrying silently until the
-component library loads, then **exits completely** — no window, no tray icon, no
-process left resident.
-
-The point is that by the time you click the desktop shortcut, Multisim is
-already up and waiting. Cold start of the ~238 MB database is the slow part, and
-this is the only way to make it not yours to wait for.
-
-It lives in `HKCU`, not `HKLM`: no elevation, and nothing left behind that you
-cannot remove. It is also off unless you turn it on, because the trade is that
-Multisim starts with the machine whether or not you use it that day.
-
-If the launcher is later moved, the stored path goes stale — the checkbox
-reports **off** in that case rather than showing a tick that does nothing.
-
----
-
 ## Building from source
 
 No SDK, no NuGet, no Visual Studio. The build uses the **C# compiler that
@@ -214,23 +161,6 @@ powershell -ExecutionPolicy Bypass -File build.ps1
 # launcher + installer  ->  dist\MultisimLauncher-Setup.exe
 powershell -ExecutionPolicy Bypass -File build.ps1 -MakeInstaller
 ```
-
-### Self-tests
-
-The shipped executable can exercise the tray and preheat paths without a mouse,
-which is how they are verified — synthetic clicks turned out to be a poor test,
-since they need DPI-correct coordinates and a window genuinely on screen:
-
-```powershell
-.\dist\MultisimLauncher.exe --selftest-preheat   # writes/reads/removes the Run key
-.\dist\MultisimLauncher.exe --selftest-tray      # hide to tray, restore again
-```
-
-The exit code is the number of failures, and the report is written to
-`%TEMP%\multisimlauncher-selftest-*.txt` and appended to the launcher log. These
-switches are in the release build on purpose: they are a few dozen lines, they
-touch nothing unless invoked, and being able to reproduce a tray problem on the
-machine that has it is worth more than the bytes.
 
 Producing the installer additionally needs [Inno Setup](https://jrsoftware.org/isdl.php);
 `installer/get-innosetup.ps1` can fetch and install it for you. End users never
@@ -370,48 +300,6 @@ Windows 11 上 Multisim 14.x 启动时会**随机**出现
 
 如果你的路径很特殊,欢迎提 issue 把路径发我,加一条匹配规则只是一行代码。
 
-## 托盘常驻、复用已有实例、开机预热
-
-这三个功能来自同一个发现:**`multisim.exe` 不是单实例程序。** 它已经在运行时再启动一次,
-会**开出第二个完整的副本**——我在参考机器上实测:连续启动两次,留下两个进程,
-各自有独立的主窗口,各自占用约 150 MB 内存。
-
-### 不会重复启动第二个 Multisim
-
-每次尝试之前,启动器会先判断**是否已有可用的实例在运行**。
-判断依据是**窗口类名**,不是窗口标题——标题里带着打开的文件名和界面语言,不是一个稳定的标识。
-
-如果已有实例,就**把它切到前台,不再启动新的**。
-
-这同时修掉了一个潜在缺陷:**旧版本在每次尝试开始时,无条件关闭机器上所有 `multisim.exe`。**
-在"启动器是唯一入口"的前提下这尚可接受,但只要你**再点一次启动**,它就会把正在用的
-会话整个丢掉,然后重新开一个——正好是"热启动"的反面。
-
-### 关闭窗口不退程序
-
-关闭窗口会把它**移到通知区域**,而不是退出,这样已经开始的**重试循环可以跑完**。
-托盘菜单可以恢复窗口,也可以真正退出;第一次最小化时会弹一个气泡,告诉你窗口去哪了。
-
-窗口是**隐藏**而不是"最小化",所以**任务栏不会留下一个点不开的按钮**。
-
-侧栏的 `退出` 是直接退出,不会绕道托盘。
-
-### 开机预热(默认关闭)
-
-勾选 **开机预热** 后,启动器会把自己写进
-`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`,带上 `--preheat` 参数。
-下次登录时,它在后台启动 Multisim,**静默重试直到元器件库加载成功**,
-然后**完全退出**——不留窗口、不留托盘图标、不留常驻进程。
-
-意义在于:等你点桌面快捷方式时,**Multisim 已经开着在等你了**。
-加载那个约 238 MB 的数据库才是慢的部分,而这个方案是唯一能让这段等待**不算在你头上**的办法。
-
-写的是 `HKCU` 而不是 `HKLM`:**不需要管理员权限**,而且**不会留下你删不掉的东西**。
-它**默认关闭**,因为代价是"不管你今天用不用,Multisim 都随开机启动"。
-
-如果之后移动了启动器位置,注册表里的路径会失效——此时复选框会**显示为未勾选**,
-而不是给你一个**什么都不做的假勾**。
-
 ## 从源码构建
 
 不需要 SDK、不需要 NuGet、不需要 Visual Studio——用的是 **Windows 自带的 C# 编译器**。
@@ -423,23 +311,6 @@ powershell -ExecutionPolicy Bypass -File build.ps1
 # 启动器 + 安装包   -> dist\MultisimLauncher-Setup.exe
 powershell -ExecutionPolicy Bypass -File build.ps1 -MakeInstaller
 ```
-
-### 自测开关
-
-发布出来的 exe **自带了不依赖鼠标的托盘 / 预热自测**:
-
-```powershell
-.\dist\MultisimLauncher.exe --selftest-preheat   # 写入/读取/移除 Run 项
-.\dist\MultisimLauncher.exe --selftest-tray      # 收进托盘再恢复
-```
-
-退出码 = 失败项数量;报告写到 `%TEMP%\multisimlauncher-selftest-*.txt`,并追加进启动器日志。
-
-**这些开关是刻意留在发布版里的**:只有几十行,不调用就什么都不做,
-而"能在一台真的出问题的机器上复现托盘故障"比省这点体积重要得多。
-
-(之所以不用模拟鼠标点击来测:那需要 DPI 正确的坐标**且**窗口真的在屏幕上,
-我在这一步上把点击打到空白桌面不止一次。)
 
 生成安装包额外需要 [Inno Setup](https://jrsoftware.org/isdl.php),
 `installer/get-innosetup.ps1` 可以自动帮你下载安装。**终端用户完全不需要它。**
