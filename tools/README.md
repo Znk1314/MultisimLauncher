@@ -84,6 +84,56 @@ licence, and so the artwork can be re-tuned by editing the density and hues.
 |---|---|
 | `Shot.cs` | Captures the launcher's client area to a PNG, for the README. Declares DPI awareness for itself, because a non-DPI-aware host sees virtualised coordinates and captures the wrong part of the screen. |
 | `WindowInfo.cs` | Reports a window's real pixel geometry and the process's DPI awareness context. Written while chasing a 200% display where the layout was being bitmap-scaled. |
+| `UiProbe.cs` | Finds a process's real top-level window, restores it if minimised, reports where it actually is, and clicks a client-relative point. |
+
+### Why UiProbe exists, and what it taught
+
+Driving the launcher's UI from a script produced a run of "the click did
+nothing", which looked like a bug in the checkbox. It was three separate
+environment problems:
+
+* the window was **minimised**, sitting at `(-16000, -16000)`, so every
+  synthetic click landed on empty desktop
+* `Process.MainWindowHandle` **caches** its value, so a handle read once kept
+  being reused; a stale handle makes `ClientToScreen` return nonsense instead of
+  failing
+* a script that is not DPI-aware sees coordinates **halved** relative to a
+  DPI-aware target, so a point in the middle of the window is computed far
+  outside it
+
+`UiProbe` exists to make all three visible before a click is sent. But the
+lesson is that synthetic input is the wrong tool for testing this: the shipped
+`--selftest-tray` and `--selftest-preheat` switches call the code directly and
+cannot be fooled by window geometry.
+
+---
+
+## Test harnesses
+
+| File | What it does |
+|---|---|
+| `TestAutostart.cs` | Exercises `Autostart` against the real `HKCU\...\Run` key and restores whatever was there. Compiled together with `src/MultisimLauncher/Autostart.cs` because the class is `internal`. |
+| `DumpStrings.cs` | Decodes every `C(...)` literal in `Strings.cs` and reports the resulting text plus the source file's ASCII purity. |
+
+`DumpStrings` matters more than it looks: a wrong code point produces
+plausible-looking but incorrect text, which compiles cleanly and only shows up
+as nonsense in the UI. Reading the decoded values back is the only way to catch
+it, and a wrong CJK code point is invisible by inspection.
+
+```
+.\obj\DumpStrings.exe src\MultisimLauncher\Strings.cs obj\strings_decoded.txt
+```
+
+`TestAutostart` covers the case a GUI cannot easily produce: a stale startup
+entry left behind by a moved install, which must report as **off** rather than
+showing a tick that does nothing.
+
+```
+$csc /target:exe /out:obj\TestAutostart.exe /reference:System.dll `
+     /reference:System.Windows.Forms.dll /reference:System.Drawing.dll `
+     tools\TestAutostart.cs src\MultisimLauncher\Autostart.cs
+.\obj\TestAutostart.exe
+```
 
 ---
 
