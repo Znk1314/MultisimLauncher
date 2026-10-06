@@ -49,6 +49,7 @@ namespace MultisimLauncher
         private readonly SidebarItem _navDetails;
         private readonly SidebarItem _navLog;
         private readonly SidebarItem _navQuit;
+        private readonly SidebarItem _navHidden;
         private readonly Label _stateText;
         private readonly Label _stateSub;
         private readonly Label _attemptText;
@@ -66,6 +67,18 @@ namespace MultisimLauncher
         private float _scale = 1f;
         private Image _background;
         private bool _showDetails;
+
+        // Start Multisim off screen and only reveal an instance that works.
+        // On by default; without it the user watches every failed attempt's
+        // splash and error box go past.
+        private bool _hideWhileStarting = true;
+
+        // The thread that keeps a starting instance hidden. Separate from the
+        // health checks because those block on SendMessageTimeout and would
+        // otherwise throttle the hiding to a few times a second.
+        private Thread _hideThread;
+        private volatile bool _hideStop;
+        private volatile uint _hidePid;
 
         // Retry tuning. Failures cluster in time, so there is a gap between
         // attempts rather than hammering the button.
@@ -138,8 +151,20 @@ namespace MultisimLauncher
             // --- GENERAL section ---
             side.Controls.Add(MakeSectionHeader(Strings.General, S(266)));
 
+            _navHidden = new SidebarItem(Strings.HiddenStart);
+            _navHidden.Location = new Point(S(14), S(292));
+            _navHidden.Size = new Size(S(SideW - 28), S(38));
+            _navHidden.SetChecked(_hideWhileStarting);
+            _navHidden.Click += delegate
+            {
+                _hideWhileStarting = !_hideWhileStarting;
+                _navHidden.SetChecked(_hideWhileStarting);
+                Log("hidden start " + (_hideWhileStarting ? "on" : "off"));
+            };
+            side.Controls.Add(_navHidden);
+
             _navDetails = new SidebarItem(Strings.ShowDetails);
-            _navDetails.Location = new Point(S(14), S(292));
+            _navDetails.Location = new Point(S(14), S(334));
             _navDetails.Size = new Size(S(SideW - 28), S(38));
             _navDetails.SetChecked(_showDetails);
             _navDetails.Click += delegate
@@ -151,13 +176,13 @@ namespace MultisimLauncher
             side.Controls.Add(_navDetails);
 
             _navLog = new SidebarItem(Strings.OpenLog);
-            _navLog.Location = new Point(S(14), S(334));
+            _navLog.Location = new Point(S(14), S(376));
             _navLog.Size = new Size(S(SideW - 28), S(38));
             _navLog.Click += delegate { OpenLogFile(); };
             side.Controls.Add(_navLog);
 
             _navQuit = new SidebarItem(Strings.Quit);
-            _navQuit.Location = new Point(S(14), S(376));
+            _navQuit.Location = new Point(S(14), S(418));
             _navQuit.Size = new Size(S(SideW - 28), S(38));
             _navQuit.Click += delegate { Close(); };
             side.Controls.Add(_navQuit);
@@ -464,8 +489,153 @@ namespace MultisimLauncher
             Log("--- session end (no success) ---");
         }
 
-        /// <summary>One cold start; true only when the instance is usable.</summary>
-        private bool TryOneLaunch()
+        /// <summary>
+        /// Diagnostic entry point: run one silent attempt and record, moment by
+        /// moment, what is actually on screen.
+        ///
+        /// This exists because the whole feature is a claim about visibility -
+        /// "the user never sees a failed attempt" - and that claim is only worth
+        /// anything if it has been observed. Sampling the visible window count
+        /// every 50 ms produces the evidence directly.
+        ///
+        /// The Multisim window is made to load its databases from a directory
+        /// that does not exist, which is the fastest reliable way to force the
+        /// failure path without touching the real installation.
+        /// </summary>
+        internal static int DiagnoseAttempt(int repetitions, bool forceFailure, bool noHideLoop, string outPath)
+        {
+            System.Text.StringBuilder report = new System.Text.StringBuilder();
+
+            for (int run = 1; run <= repetitions; run++)
+            {
+                MainForm f = new MainForm(new string[0]);
+                IntPtr handle = f.Handle;             // realise the window, never show it
+
+                // OnLoad does not run because the window is never shown, so the
+                // install has to be located here.
+                f._install = MultisimLocator.Find();
+                if (f._install == null)
+                {
+                    report.AppendLine("run " + run + ": Multisim not found");
+                    try { f.ForceCloseForDiagnostics(); } catch { }
+                    continue;
+                }
+
+                if (forceFailure)
+                {
+                    // LockDirs is derived from these, so pointing them somewhere
+                    // that does not exist guarantees the lock-file count can never
+                    // reach the threshold and the attempt is treated as failed.
+                    // Nothing in the real installation is touched.
+                    f._install.DatabaseDir = @"C:\__multisim_probe_nonexistent__";
+                    f._install.UserDatabaseDir = @"C:\__multisim_probe_nonexistent__";
+                }
+
+                // Control case: skip the hide loop but keep STARTF_USESHOWWINDOW,
+                // to tell "hiding breaks the launch" apart from "the hidden start
+                // itself breaks it".
+                if (noHideLoop) f._hideWhileStarting = false;
+
+                report.AppendLine("=== run " + run + "  (forceFailure=" + forceFailure + ") ===");
+
+                System.Threading.Thread t = new System.Threading.Thread(delegate()
+                {
+                    try
+                    {
+                        System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
+                        int samples = 0, visibleSeen = 0, maxVisible = 0;
+                        bool done = false;
+
+                        System.Threading.Thread worker = new System.Threading.Thread(delegate()
+                        {
+                            try { f.TryOneLaunch(); } catch { }
+                            done = true;
+                        });
+                        worker.IsBackground = true;
+                        worker.Start();
+
+                        while (!done && sw.ElapsedMilliseconds < 90000)
+                        {
+                            int sourcePid = 0;
+                            foreach (System.Diagnostics.Process q in System.Diagnostics.Process.GetProcessesByName("multisim"))
+                            {
+                                try { sourcePid = q.Id; } catch { }
+                                finally { try { q.Dispose(); } catch { } }
+                                break;   // only one attempt runs at a time
+                            }
+
+                            if (sourcePid != 0)
+                            {
+                                // Record every top-level window and its state,
+                                // not just the visible ones. The hide loop runs
+                                // far more often than this sampler yet reported
+                                // almost no hiding, which can only mean the two
+                                // are not seeing the same window set.
+                                System.Text.StringBuilder states = new System.Text.StringBuilder();
+                                int vis = 0;
+                                foreach (IntPtr h in Win32.TopLevelWindows((uint)sourcePid))
+                                {
+                                    bool v = Win32.IsWindowVisible(h);
+                                    if (v) vis++;
+                                    states.Append(" ").Append(h).Append(v ? ":VIS" : ":hid");
+                                }
+                                samples++;
+                                if (vis > 0) visibleSeen++;
+                                if (vis > maxVisible) maxVisible = vis;
+
+                                // Progress towards health, to tell "the database
+                                // never opened" apart from "the window appeared
+                                // but the check did not accept it".
+                                if (samples % 20 == 0)
+                                    report.AppendLine("  t=" + sw.ElapsedMilliseconds.ToString("00000")
+                                                      + "ms  locks=" + SessionHealth.CountLockFiles(f._install)
+                                                      + "  healthy=" + f.IsHealthyInstance((uint)sourcePid)
+                                                      + "  errDialog=" + SessionHealth.HasDatabaseErrorDialog((uint)sourcePid));
+
+                                if (vis > 0)
+                                    report.AppendLine("  t=" + sw.ElapsedMilliseconds.ToString("00000")
+                                                      + "ms  VISIBLE=" + vis);
+                            }
+                            System.Threading.Thread.Sleep(50);
+                        }
+
+                        report.AppendLine("  samples=" + samples
+                                          + "  samplesWithVisibleWindow=" + visibleSeen
+                                          + "  peak=" + maxVisible
+                                          + "  hideTicks=" + MainForm.HideTicks
+                                          + "  hideActions=" + MainForm.HideCount);
+                    }
+                    catch (Exception ex) { report.AppendLine("  EXCEPTION " + ex.Message); }
+                });
+                t.IsBackground = true;
+                t.Start();
+                t.Join(120000);
+
+                try { f.ForceCloseForDiagnostics(); } catch { }
+            }
+
+            try { System.IO.File.WriteAllText(outPath, report.ToString(), new System.Text.UTF8Encoding(false)); }
+            catch { }
+            return 0;
+        }
+
+        /// <summary>Close without the tray/close interception, for diagnostics.</summary>
+        internal void ForceCloseForDiagnostics()
+        {
+            try { Close(); } catch { }
+        }
+
+        /// <summary>
+        /// One cold start; true only when the instance is usable.
+        ///
+        /// The start happens off screen. A Multisim that is going to fail shows
+        /// its splash and its main window before the database error appears, so
+        /// starting it normally means the user watches every failed attempt go
+        /// by. Instead, the frame and splash are hidden as soon as they appear
+        /// and only a confirmed-healthy instance is revealed - so the window the
+        /// user finally sees is the one that actually works.
+        /// </summary>
+        internal bool TryOneLaunch()
         {
             KillResident();
             SessionHealth.RemoveLockFiles(_install);
@@ -473,10 +643,29 @@ namespace MultisimLauncher
             Process p;
             try
             {
-                ProcessStartInfo psi = new ProcessStartInfo(_install.ExePath);
-                psi.WorkingDirectory = _install.InstallDir;
-                psi.UseShellExecute = true;   // exactly like a desktop double-click
-                p = Process.Start(psi);
+                // StartHidden, not Process.Start: STARTF_USESHOWWINDOW is what
+                // keeps the splash off screen from the very first frame. Without
+                // it there is a short flash at the start of every attempt, which
+                // the diagnostic measured and which is exactly what this feature
+                // is supposed to remove.
+                p = _hideWhileStarting
+                    ? Win32.StartHidden(_install.ExePath, _install.InstallDir)
+                    : Process.Start(new ProcessStartInfo(_install.ExePath)
+                      {
+                          WorkingDirectory = _install.InstallDir,
+                          UseShellExecute = true   // exactly like a desktop double-click
+                      });
+
+                if (p == null && _hideWhileStarting)
+                {
+                    // CreateProcess can refuse; fall back rather than fail, since
+                    // a visible start is still a working start.
+                    Log("StartHidden failed, falling back to a normal start");
+                    ProcessStartInfo psi = new ProcessStartInfo(_install.ExePath);
+                    psi.WorkingDirectory = _install.InstallDir;
+                    psi.UseShellExecute = true;
+                    p = Process.Start(psi);
+                }
             }
             catch (Exception ex)
             {
@@ -490,17 +679,23 @@ namespace MultisimLauncher
             bool healthy = false;
             bool sawDialog = false;
 
+            // Keep it off screen for the whole attempt. The thread polls at 12 ms
+            // so a window that appears is gone before it can be noticed; the
+            // health checks below are far too slow to do that themselves.
+            if (_hideWhileStarting) StartHiding((uint)p.Id);
+
             while (sw.ElapsedMilliseconds < StartTimeoutMs)
             {
                 if (_cancelled) break;
-                Sleep(400);
+                Sleep(150);
+
                 try { if (p.HasExited) break; } catch { break; }
 
                 if (SessionHealth.HasDatabaseErrorDialog((uint)p.Id)) { sawDialog = true; break; }
-                if (SessionHealth.IsHealthy((uint)p.Id, _install)) { healthy = true; break; }
+                if (IsHealthyInstance((uint)p.Id)) { healthy = true; break; }
             }
 
-            if (!healthy) { Discard(p); return false; }
+            if (!healthy) { StopHiding(); Discard(p); return false; }
 
             // Databases are open - now make sure it stays that way. The known
             // broken instances used to slip through exactly here.
@@ -508,22 +703,188 @@ namespace MultisimLauncher
             while (settle.ElapsedMilliseconds < SettleMs)
             {
                 if (_cancelled) break;
-                Sleep(300);
-                try { if (p.HasExited) { Discard(p); return false; } } catch { Discard(p); return false; }
-                if (SessionHealth.HasDatabaseErrorDialog((uint)p.Id)) { Discard(p); return false; }
-                if (SessionHealth.CountLockFiles(_install) < SessionHealth.RequiredLocks) { Discard(p); return false; }
+                Sleep(150);
+                try { if (p.HasExited) { StopHiding(); Discard(p); return false; } }
+                catch { StopHiding(); Discard(p); return false; }
+                if (SessionHealth.HasDatabaseErrorDialog((uint)p.Id)) { StopHiding(); Discard(p); return false; }
+                if (SessionHealth.CountLockFiles(_install) < SessionHealth.RequiredLocks) { StopHiding(); Discard(p); return false; }
             }
 
-            if (_cancelled) { Discard(p); return false; }
-            if (sawDialog) { Discard(p); return false; }
+            if (_cancelled) { StopHiding(); Discard(p); return false; }
+            if (sawDialog) { StopHiding(); Discard(p); return false; }
+
+            // Stop hiding BEFORE revealing, and wait for the thread to be gone.
+            //
+            // This ordering is the whole feature. An earlier version stopped the
+            // thread in a finally block that ran after the reveal, so the hide
+            // loop was still running at the moment the window was shown and put
+            // it straight back - the successful case then never appeared at all.
+            // StopHiding joins the thread, so once it returns nothing can hide
+            // the window again.
+            StopHiding();
+
+            // Healthy: this is the one to show. Revealing it here, rather than
+            // leaving it hidden, is the whole point - a working Multisim appears
+            // as if it had started immediately.
+            if (_hideWhileStarting) RevealShellWindow((uint)p.Id);
 
             Ui(delegate { RefreshDetailLabels(); });
             return true;
         }
 
+        /// <summary>
+        /// Health test for an attempt that is being kept hidden.
+        ///
+        /// SessionHealth.IsHealthy requires the main window to be *visible*, which
+        /// is correct when the user is watching but makes the hidden start
+        /// impossible to confirm: the window is deliberately hidden, so the test
+        /// could never pass, every attempt ran to its timeout and was thrown away,
+        /// and the databases opened for nothing. Measured: locks=3 for 60 seconds
+        /// while healthy stayed false.
+        ///
+        /// So the window only has to exist here, not be visible - which is the
+        /// right question anyway once the launcher is the thing controlling
+        /// visibility. Everything else is unchanged: the databases must be open,
+        /// and a partially built frame does not count.
+        /// </summary>
+        private bool IsHealthyInstance(uint pid)
+        {
+            if (SessionHealth.CountLockFiles(_install) < SessionHealth.RequiredLocks) return false;
+            foreach (IntPtr h in Win32.TopLevelWindows(pid))
+            {
+                if (!Win32.IsMultisimShellWindow(h)) continue;
+                // Existence of the frame is the signal; visibility is ours to set.
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Hide whatever a starting Multisim has just put on screen.
+        ///
+        /// Measured with --diag-attempt, which reported window classes and, for
+        /// dialogs, their contents. Four findings shaped this:
+        ///
+        ///   * ShowWindowAsync only posts a message and returns; it had no effect
+        ///     at all on another process's window, so the frame stayed visible
+        ///     for the whole attempt. The synchronous ShowWindow hides it.
+        ///
+        ///   * the splash screen is a dialog - title "Multisim", class #32770 -
+        ///     so an earlier "never hide dialogs" rule let it sit on screen for
+        ///     the entire attempt. The database error box is also #32770 titled
+        ///     "Multisim", so class and title cannot separate them.
+        ///
+        ///   * this method must not block. It originally called the error-dialog
+        ///     test, which uses SendMessageTimeout with up to a second per child
+        ///     window; on a 12 ms loop that throttled hiding to a few times a
+        ///     second and windows were routinely caught on screen. Everything
+        ///     here is now a cheap, non-blocking window query.
+        ///
+        ///   * the error box is hidden along with everything else, which is safe:
+        ///     the health-check loop identifies it on its own and Discard closes
+        ///     it moments later. Leaving it visible gained nothing and cost the
+        ///     blocking call above.
+        /// </summary>
+        private void HideShellWindows(uint pid)
+        {
+            _hideTicks++;
+            try
+            {
+                foreach (IntPtr h in Win32.TopLevelWindows(pid))
+                {
+                    try
+                    {
+                        if (!Win32.IsWindowVisible(h)) continue;
+                        Win32.ShowWindow(h, Win32.SW_HIDE);
+                        _hideCount++;
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+        }
+
+        // Diagnostic counters, read by DiagnoseAttempt to prove the hide loop is
+        // actually running rather than silently starved.
+        internal static int HideTicks { get { return _hideTicks; } }
+        internal static int HideCount { get { return _hideCount; } }
+        private static int _hideTicks;
+        private static int _hideCount;
+
+        /// <summary>
+        /// Keep a starting instance off screen until it is either healthy or
+        /// discarded. Runs on its own thread; returns immediately and the caller
+        /// carries on with the health checks.
+        /// </summary>
+        private void StartHiding(uint pid)
+        {
+            _hidePid = pid;
+            _hideStop = false;
+            _hideThread = new Thread(new ThreadStart(delegate()
+            {
+                while (!_hideStop)
+                {
+                    // Re-read each pass: Discard clears it to make the thread let
+                    // go of a process that is being closed.
+                    uint target = _hidePid;
+                    if (target != 0) HideShellWindows(target);
+                    Thread.Sleep(12);
+                }
+            }));
+            _hideThread.IsBackground = true;
+            _hideThread.Start();
+        }
+
+        private void StopHiding()
+        {
+            _hideStop = true;
+            Thread t = _hideThread;
+            _hideThread = null;
+            if (t != null)
+            {
+                try { t.Join(500); } catch { }
+            }
+        }
+
+        /// <summary>
+        /// Reveal the main frame once the instance is known to be good, and put
+        /// it in front. The splash is not restored - it has served its purpose.
+        /// </summary>
+        private void RevealShellWindow(uint pid)
+        {
+            try
+            {
+                foreach (IntPtr h in Win32.TopLevelWindows(pid))
+                {
+                    try
+                    {
+                        if (!Win32.IsMultisimShellWindow(h)) continue;
+                        string cls = Win32.ClassOf(h);
+                        // The frame is "Multisim*"; "LVFrame" is the LabVIEW host
+                        // window, which stays behind it.
+                        if (!cls.StartsWith("Multisim", StringComparison.Ordinal)) continue;
+
+                        Win32.ShowWindow(h, Win32.SW_RESTORE);
+                        Win32.ShowWindow(h, Win32.SW_SHOW);
+                        Win32.RaiseWithoutActivating(h);
+                        Win32.SetForegroundWindow(h);
+                        Log("revealed the main window (hwnd " + h + ")");
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+        }
+
         /// <summary>Close an attempt that did not make it, without any noise.</summary>
         private void Discard(Process p)
         {
+            // Let go before closing it. Without this the hide thread and the
+            // close race each other: the thread keeps hiding the window while
+            // WM_CLOSE is being posted to it, which is needless churn on a
+            // process that is on its way out.
+            _hidePid = 0;
+
             try
             {
                 if (p != null && !p.HasExited)
