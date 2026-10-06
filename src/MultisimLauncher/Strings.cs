@@ -92,13 +92,5 @@ namespace MultisimLauncher
         public static readonly string Loaded = C(0x5DF2, 0x52A0, 0x8F7D);
         // "not loaded"
         public static readonly string NotLoaded = C(0x672A, 0x52A0, 0x8F7D);
-
-        // ---- silent start --------------------------------------------------
-        // "silent start"
-        public static readonly string HiddenStart = C(0x9759, 0x9ED8, 0x542F, 0x52A8);
-        // "only show the window once the component library has loaded"
-        public static readonly string HiddenHint =
-            C(0x5143, 0x5668, 0x4EF6, 0x5E93, 0x52A0, 0x8F7D, 0x597D,
-              0x4E86, 0x624D, 0x663E, 0x793A, 0x7A97, 0x53E3);
     }
 }

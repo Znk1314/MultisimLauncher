@@ -256,34 +256,18 @@ namespace MultisimLauncher
         public static bool HasDatabaseErrorDialog(uint pid)
         {
             foreach (IntPtr h in Win32.TopLevelWindows(pid))
-                if (IsDatabaseErrorDialog(h)) return true;
-            return false;
-        }
-
-        /// <summary>
-        /// Whether one specific window is the database error box.
-        ///
-        /// Split out from HasDatabaseErrorDialog because the launcher has to make
-        /// this decision per window while hiding a starting instance: the splash
-        /// screen is a dialog too, with the same class and the same title, so
-        /// class and title cannot separate them. Only the content can.
-        ///
-        /// The visible/responsive guards that the enumeration used to apply are
-        /// kept here, so both callers behave identically.
-        /// </summary>
-        public static bool IsDatabaseErrorDialog(IntPtr h)
-        {
-            if (h == IntPtr.Zero) return false;
-            if (!Win32.IsWindowVisible(h)) return false;
-            if (Win32.ClassOf(h) != "#32770") return false;
-            if (!Win32.IsResponsive(h)) return false;
-            if (Win32.TextOf(h).Trim() != "Multisim") return false;
-
-            foreach (IntPtr c in Win32.ChildWindows(h))
             {
-                string t = Win32.MsgTextOf(c, 4096);
-                if (t == null) continue;
-                if (t.IndexOf(MarkerAccessDb, StringComparison.Ordinal) >= 0) return true;
+                if (!Win32.IsWindowVisible(h)) continue;
+                if (Win32.ClassOf(h) != "#32770") continue;
+                if (!Win32.IsResponsive(h)) continue;
+                if (Win32.TextOf(h).Trim() != "Multisim") continue;
+
+                foreach (IntPtr c in Win32.ChildWindows(h))
+                {
+                    string t = Win32.MsgTextOf(c, 4096);
+                    if (t == null) continue;
+                    if (t.IndexOf(MarkerAccessDb, StringComparison.Ordinal) >= 0) return true;
+                }
             }
             return false;
         }

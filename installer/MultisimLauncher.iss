@@ -21,7 +21,7 @@
 #endif
 
 #define AppName        "Multisim Launcher"
-#define AppVersion     "1.0.1"
+#define AppVersion     "1.0.0"
 #define AppPublisher   "Multisim Launcher contributors"
 #define AppURL         "https://github.com/"
 #define AppExeName     "MultisimLauncher.exe"
@@ -45,8 +45,8 @@ AllowNoIcons=no
 
 OutputDir={#OutputDir}
 OutputBaseFilename=MultisimLauncher-Setup
-VersionInfoVersion=1.0.1.0
-VersionInfoProductVersion=1.0.1.0
+VersionInfoVersion=1.0.0.0
+VersionInfoProductVersion=1.0.0
 VersionInfoDescription={#AppName} Setup
 VersionInfoProductName={#AppName}
 VersionInfoCompany={#AppPublisher}

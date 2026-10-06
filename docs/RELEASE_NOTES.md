@@ -1,4 +1,4 @@
-# Multisim Launcher 1.0.1
+# Multisim Launcher 1.0.0
 
 A small Windows launcher that keeps starting NI Multisim until the component
 library actually loads, working around the well known Windows 11 startup
@@ -16,56 +16,13 @@ button then becomes **Stop**.
 
 ---
 
-## What's new in 1.0.1
-
-**Silent start — the window only appears once it works.**
-
-Previously every failed attempt put its splash and then its main window on
-screen before the launcher discarded it, so you watched each failure go past.
-Now each attempt is made entirely off screen:
-
-1. the process is started and its windows are hidden as soon as they appear, by
-   a background thread repeating every 12 ms;
-2. the databases are checked as before — lock files present, main frame built,
-   no error box;
-3. **only a confirmed-healthy instance is revealed and brought to the front.**
-
-A failed attempt is closed without ever having been visible. Measured on the
-reference machine: **0 visible samples out of 727** during a forced failure,
-against 13–20 before, and the main frame never stayed on screen for a single
-frame in either case.
-
-A **Silent start** switch in the sidebar turns it off.
-
-**Also fixed**
-
-* `ShowWindowAsync` has no effect on another process's window — the frame stayed
-  visible for the entire attempt. Only the synchronous `ShowWindow` hides it.
-* the splash screen is itself a dialog (`#32770`, title `Multisim`), the same
-  class *and* title as the database error box, so the two can only be told apart
-  by their message text. Both are now hidden.
-* the health test required the main window to be **visible**, which can never be
-  true while the launcher is deliberately hiding it. Every attempt therefore ran
-  to its timeout and was discarded with the databases open for nothing.
-
-Two things were tried and rejected, and are recorded here because both look like
-improvements:
-
-* `STARTF_USESHOWWINDOW` with `SW_HIDE` suppresses the splash neatly — and then
-  Multisim never opens its databases at all. No lock files for 50+ seconds,
-  against 8 seconds when started normally.
-* closing the window to the tray, and a preheat-at-login option, were built,
-  measured as not what was wanted, and reverted in full.
-
----
-
 ## Download
 
-**`MultisimLauncher-Setup.exe`** (2.7 MB) — the only file you need.
+**`MultisimLauncher-Setup.exe`** (2.5 MB) — the only file you need.
 It installs for the current user, so **no administrator rights are required**,
 and it creates a desktop shortcut, a Start menu entry and an uninstall entry.
 
-`MultisimLauncher.exe` (679 KB) is the same program as a single portable file,
+`MultisimLauncher.exe` (550 KB) is the same program as a single portable file,
 if you would rather not install anything.
 
 ---
