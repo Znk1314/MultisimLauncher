@@ -137,6 +137,34 @@ if it refuses — it usually refuses, because it is sitting on a modal dialog.
 The lock files are then removed and the next attempt is started. None of this
 is shown to you beyond the attempt counter.
 
+### Attempts at hiding the failures, and why they were dropped
+
+It is tempting to make failed attempts invisible altogether: start Multisim off
+screen, and only reveal an instance once its databases are confirmed open. That
+was built and then removed, so that nobody spends the same effort twice. What
+was measured, using a diagnostic that sampled visible windows every 50 ms:
+
+* Hiding works well enough for the main frame — a forced failure peaked at
+  **0 visible samples out of 727** — but the splash screen is itself a dialog
+  (`#32770`, title `Multisim`), which is the **same class and the same title** as
+  the database error box. They can only be told apart by reading the message
+  text out of the child controls.
+* Even with that handled, a brief flash of the splash remained on the path to a
+  successful launch. It was reproducible, and it is the reason the feature was
+  abandoned rather than tuned further: the window the user is supposed to see is
+  also the window being suppressed, so any timing slip is visible as a flicker.
+* `STARTF_USESHOWWINDOW` with `SW_HIDE` suppresses the splash cleanly, and then
+  **Multisim never opens its databases at all**: no lock files for 50+ seconds,
+  against 8 seconds when started normally.
+* Making the launcher tolerate a hidden window also needs the health check to
+  accept a window that *exists* rather than one that is *visible* — otherwise
+  every attempt runs to its timeout and is discarded with the databases open for
+  nothing.
+
+The conclusion recorded here is that this particular UI trick is not worth its
+fragility. Watching the attempt counter is preferable to a flicker that cannot
+be reliably eliminated.
+
 ## How Multisim is located
 
 1. **Registry** — the NI installer records the real database paths, so this
@@ -292,6 +320,25 @@ Windows 11 上 Multisim 14.x 启动时会**随机**出现
 4. 进程在随后一小段观察期内仍然存活。
 
 只看其中一条是不够的:失败的那次**主窗口也会出现**,而只看锁文件也不能证明界面起来了。
+
+### 关于"把失败的过程藏起来",以及为什么放弃
+
+很容易想到:干脆让失败的尝试**完全不可见** —— 后台启动 Multisim,确认数据库打开后再把窗口亮出来。
+这个功能**做过,然后移除了**,这里记下来是为了别人不用再走一遍。
+
+实测方式:写了个诊断,每 50ms 采样一次"哪些窗口可见"。结论:
+
+* 主框架藏得住 —— 强制失败场景 **727 次采样 0 次可见**;但**启动画面本身是个对话框**
+  (`#32770`,标题 `Multisim`),和报错框**类名和标题完全相同**,只能靠读取子控件的消息文本区分。
+* 即便处理了这一点,**通往成功的那条路径上,启动画面仍会短暂闪现一下**。它是可复现的,
+  也是这个功能被**放弃而不是继续调优**的原因:用户该看到的那个窗口,恰恰就是被压制的那个窗口,
+  所以任何时序偏差都会表现为闪烁。
+* `STARTF_USESHOWWINDOW` 配 `SW_HIDE` 能把启动画面干净地压住,然后
+  **Multisim 就完全不打开数据库了**:50 多秒没有任何锁文件,而常规方式 8 秒内就出现两个。
+* 要让启动器容忍隐藏窗口,健康判定还必须改成接受"窗口**存在**"而不是"窗口**可见**",
+  否则每次尝试都会跑满超时被丢弃,数据库白打开一场。
+
+结论:**这个 UI 技巧不值得它带来的脆弱性。** 看着尝试计数递增,比一个无法可靠消除的闪烁要好。
 
 ## 关于 Multisim 的安装位置
 
